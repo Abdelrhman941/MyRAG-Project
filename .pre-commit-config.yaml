@@ -1,0 +1,63 @@
+default_install_hook_types:
+  - pre-commit
+  - pre-push
+
+repos:
+  # ---------------------------------------------------------
+  # Standard Hooks
+  # ---------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+
+  # ---------------------------------------------------------
+  # Ruff
+  # ---------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+        stages: [pre-commit]
+
+      - id: ruff-format
+        files: ^backend/
+        stages: [pre-commit]
+
+  # ---------------------------------------------------------
+  # Local Hooks
+  # ---------------------------------------------------------
+  - repo: local
+    hooks:
+      # ---------------- Backend ----------------
+
+      - id: mypy
+        name: mypy
+        entry: bash -c "cd backend && uv run mypy app"
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: pytest
+        name: pytest
+        entry: bash -c "cd backend && uv run pytest"
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      # ---------------- Frontend ----------------
+
+      - id: eslint
+        name: eslint
+        entry: bash -c "cd frontend && pnpm lint"
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+        stages: [pre-commit]

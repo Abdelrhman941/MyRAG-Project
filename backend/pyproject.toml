@@ -1,0 +1,61 @@
+[project]
+name = "RAG-backend"
+version = "0.1.0"
+description = "A backend service for RAG applications."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "UP", "B", "ASYNC", "SIM", "RUF"]
+ignore = ["B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F401", "SIM117"]
+"__init__.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+  "fastapi.Depends",
+  "fastapi.Query",
+  "fastapi.Path",
+  "fastapi.Body",
+  "fastapi.Header",
+  "Depends",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_decorators = false
+exclude = ["tests/"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = ["error::DeprecationWarning"]
