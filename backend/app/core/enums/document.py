@@ -17,6 +17,7 @@ class DocumentType(StrEnum):
 class DocumentStatus(StrEnum):
     """Document processing status."""
 
+    UPLOADED = "uploaded"
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"

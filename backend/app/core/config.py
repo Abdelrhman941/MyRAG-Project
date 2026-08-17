@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = _PROJECT_METADATA.get("version", "0.1.0")
     APP_DESCRIPTION: str = _PROJECT_METADATA.get("description", "")
     ENVIRONMENT: Environment = Environment.LOCAL
+    DATABASE_URL: str = "sqlite+aiosqlite:///./data/rag.db"
 
     # ------------ Storage ------------
     MAX_FILE_SIZE_MB: Annotated[int, Field(gt=0)] = 50
