@@ -160,16 +160,18 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Normalize application-domain errors into the standard response."""
 
-    if exc.status_code >= 500:
+    app_error = cast(AppError, exc)
+
+    if app_error.status_code >= 500:
         logger.error(
             "Application error",
-            exc_info=exc,
+            exc_info=app_error,
             extra={
                 "event": "api.app_error",
-                "status_code": exc.status_code,
+                "status_code": app_error.status_code,
                 "path": request.url.path,
                 "method": request.method,
             },
@@ -179,7 +181,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
             "Application error",
             extra={
                 "event": "api.app_error",
-                "status_code": exc.status_code,
+                "status_code": app_error.status_code,
                 "path": request.url.path,
                 "method": request.method,
             },
@@ -187,11 +189,11 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
 
     return _error_response(
         request=request,
-        status_code=exc.status_code,
-        code=exc.code,
-        message=exc.message,
-        details=exc.details,
-        headers=exc.headers,
+        status_code=app_error.status_code,
+        code=app_error.code,
+        message=app_error.message,
+        details=app_error.details,
+        headers=app_error.headers,
     )
 
 

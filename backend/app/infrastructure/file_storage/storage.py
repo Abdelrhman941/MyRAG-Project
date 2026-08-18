@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import shutil
 from pathlib import Path
@@ -25,15 +26,7 @@ class DocumentStorage:
         return path
 
     async def save(self, filename: str, content: bytes) -> None:
-        """Save document content to disk.
-
-        Args:
-            filename: The UUID-based filename (e.g. '<uuid>.pdf').
-            content: The file bytes.
-
-        Raises:
-            StorageError: If the file cannot be written.
-        """
+        """Save document content to disk."""
         try:
             path = self._get_path(filename)
             async with aiofiles.open(path, "wb") as f:
@@ -43,17 +36,7 @@ class DocumentStorage:
             raise StorageError(message="Failed to save document.") from None
 
     async def read(self, filename: str) -> bytes:
-        """Read document content from disk.
-
-        Args:
-            filename: The UUID-based filename.
-
-        Returns:
-            The file bytes.
-
-        Raises:
-            StorageError: If the file cannot be read.
-        """
+        """Read document content from disk."""
         try:
             path = self._get_path(filename)
             async with aiofiles.open(path, "rb") as f:
@@ -63,14 +46,7 @@ class DocumentStorage:
             raise StorageError(message="Failed to read document.") from None
 
     def delete(self, filename: str) -> None:
-        """Delete document from disk.
-
-        Args:
-            filename: The UUID-based filename.
-
-        Raises:
-            StorageError: If the file cannot be deleted.
-        """
+        """Delete document from disk."""
         try:
             path = self._get_path(filename)
             if path.exists():
@@ -79,19 +55,11 @@ class DocumentStorage:
             logger.exception("Storage delete failed", exc_info=e)
             raise StorageError(message="Failed to delete document.") from None
 
-    def move_from(self, source_path: Path, filename: str) -> None:
-        """Move a file from a temporary location to the final storage.
-
-        Args:
-            source_path: The source path of the temporary file.
-            filename: The destination UUID-based filename.
-
-        Raises:
-            StorageError: If the file cannot be moved.
-        """
+    async def move_from(self, source_path: Path, filename: str) -> None:
+        """Move a file from a temporary location to the final storage."""
         try:
             dest_path = self._get_path(filename)
-            shutil.move(str(source_path), str(dest_path))
+            await asyncio.to_thread(shutil.move, str(source_path), str(dest_path))
         except OSError as e:
             logger.exception("Storage move failed", exc_info=e)
             raise StorageError(message="Failed to save document.") from None

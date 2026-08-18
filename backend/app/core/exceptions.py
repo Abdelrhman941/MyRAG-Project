@@ -46,8 +46,29 @@ class DuplicateDocumentError(AppError):
     message: str = "This document already exists."
 
 
+class MissingFilenameError(AppError):
+    status_code = 400
+    code = "missing_filename"
+    message = "Filename is required."
+
+
+class UnsupportedDocumentTypeError(AppError):
+    status_code = 422
+    code = "unsupported_document_type"
+    message = "Unsupported document type."
+
+
+class FileTooLargeError(AppError):
+    status_code = 413
+    code = "file_too_large"
+    message = "File exceeds the maximum allowed size."
+
+
 __all__ = [
     "AppError",
     "DuplicateDocumentError",
+    "FileTooLargeError",
+    "MissingFilenameError",
     "StorageError",
+    "UnsupportedDocumentTypeError",
 ]

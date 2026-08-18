@@ -11,7 +11,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import DocumentStatus, DocumentType, Settings
-from ..core.exceptions import AppError, DuplicateDocumentError
+from ..core.exceptions import (
+    DuplicateDocumentError,
+    FileTooLargeError,
+    MissingFilenameError,
+    UnsupportedDocumentTypeError,
+)
 from ..infrastructure import DocumentStorage
 from ..models import Document
 
@@ -43,7 +48,7 @@ class DocumentService:
           3. Move temp file to final UUID-named location only after a successful commit.
         """
         if not file.filename:
-            raise AppError(message="Filename is required.", status_code=400)
+            raise MissingFilenameError()
 
         # 1. Validate file extension
         ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
@@ -51,16 +56,18 @@ class DocumentService:
             doc_type = DocumentType(ext)
         except ValueError as e:
             supported = [t.value for t in DocumentType]
-            raise AppError(
-                message=f"Unsupported file type '{ext}'. Supported: {supported}",
-                status_code=422,
+            raise UnsupportedDocumentTypeError(
+                message=f"Unsupported file type '{ext}'. Supported: {supported}"
             ) from e
 
         # 2. Stream to temp file, hashing and size-checking as we go.
         #    os.close() the fd immediately — aiofiles will open the path itself.
         sha256 = hashlib.sha256()
         total_size = 0
-        tmp_fd, tmp_path_str = tempfile.mkstemp(suffix=doc_type.extension)
+        tmp_fd, tmp_path_str = tempfile.mkstemp(
+            suffix=doc_type.extension,
+            dir=self.settings.UPLOAD_DIR,
+        )
         os.close(tmp_fd)
         tmp_path = Path(tmp_path_str)
 
@@ -70,11 +77,8 @@ class DocumentService:
                     total_size += len(chunk)
                     if total_size > self.settings.max_file_size_bytes:
                         max_mb = self.settings.MAX_FILE_SIZE_MB
-                        raise AppError(
-                            message=(
-                                f"File exceeds maximum allowed size of {max_mb}MB."
-                            ),
-                            status_code=413,
+                        raise FileTooLargeError(
+                            message=f"File exceeds maximum allowed size of {max_mb}MB."
                         )
                     sha256.update(chunk)
                     await f.write(chunk)
@@ -111,7 +115,7 @@ class DocumentService:
         #    If this fails, delete the DB record so it does not become orphaned.
         final_filename = f"{doc_id}{doc_type.extension}"
         try:
-            self.storage.move_from(tmp_path, final_filename)
+            await self.storage.move_from(tmp_path, final_filename)
         except Exception:
             logger.exception("File move failed after DB commit; rolling back DB record")
             await self.db.delete(document)
