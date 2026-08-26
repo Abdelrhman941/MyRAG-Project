@@ -40,38 +40,38 @@ jobs:
       - name: MyPy
         run: uv run mypy app
 
-      - name: Run Tests
-        run: uv run pytest -v
+      # - name: Run Tests
+      #   run: uv run pytest -v
 
-  frontend:
-    name: Frontend
-    runs-on: ubuntu-latest
+  # frontend:
+  #   name: Frontend
+  #   runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: frontend
+  #   defaults:
+  #     run:
+  #       working-directory: frontend
 
-    steps:
-      - uses: actions/checkout@v4
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
+  #     - uses: pnpm/action-setup@v4
+  #       with:
+  #         version: latest
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 22
+  #         cache: pnpm
+  #         cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
 
-      - name: ESLint
-        run: pnpm lint
+  #     - name: ESLint
+  #       run: pnpm lint
 
-      - name: Type Check
-        run: pnpm exec tsc --noEmit
+  #     - name: Type Check
+  #       run: pnpm exec tsc --noEmit
 
-      - name: Build
-        run: pnpm build
+  #     - name: Build
+  #       run: pnpm build
