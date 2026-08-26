@@ -4,9 +4,10 @@ from enum import StrEnum
 class DocumentType(StrEnum):
     """Supported document types."""
 
+    DOCX = "docx"
+    MD = "md"
     PDF = "pdf"
     TXT = "txt"
-    MD = "md"
 
     @property
     def extension(self) -> str:

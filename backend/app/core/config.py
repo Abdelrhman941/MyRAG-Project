@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: Annotated[int, Field(gt=0)] = 50
     UPLOAD_DIR: Path = _PROJECT_ROOT / "data" / "uploads"
 
+    # ------------ Upload limits ------------
+    MAX_FILES_PER_REQUEST: Annotated[int, Field(gt=0)] = 10
+    UPLOAD_RATE_LIMIT: str = "10/hour"
+    UPLOAD_CONCURRENCY: Annotated[int, Field(gt=0)] = 4
+
     @model_validator(mode="after")
     def _ensure_upload_dir(self) -> "Settings":
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

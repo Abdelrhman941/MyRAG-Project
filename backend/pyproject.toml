@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     "python-multipart>=0.0.32",
+    "slowapi>=0.1.10",
     "sqlalchemy[asyncio]>=2.0.52",
 ]
 

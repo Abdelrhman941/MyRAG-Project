@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 import os
@@ -38,9 +39,10 @@ class DocumentService:
         self.db = db
         self.storage = storage
         self.settings = settings
+        self._db_lock = asyncio.Lock()
 
-    async def upload_document(self, file: UploadFile) -> Document:
-        """Upload a new document.
+    async def _upload_single(self, file: UploadFile) -> Document:
+        """Core per-file upload: validate → stream → hash → dedup → persist → move.
 
         Strategy (avoids orphan DB records):
           1. Stream file → temp file on disk, computing SHA-256 and size in parallel.
@@ -50,7 +52,7 @@ class DocumentService:
         if not file.filename:
             raise MissingFilenameError()
 
-        # 1. Validate file extension
+        # 1. Validate file extension.
         ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
         try:
             doc_type = DocumentType(ext)
@@ -98,18 +100,20 @@ class DocumentService:
             status=DocumentStatus.UPLOADED,
         )
 
-        try:
-            self.db.add(document)
-            await self.db.commit()
-            await self.db.refresh(document)
-        except IntegrityError as e:
-            await self.db.rollback()
-            _remove_temp(tmp_path)
-            raise DuplicateDocumentError() from e
-        except Exception:
-            await self.db.rollback()
-            _remove_temp(tmp_path)
-            raise
+        async with self._db_lock:
+            try:
+                self.db.add(document)
+                await self.db.commit()
+                await self.db.refresh(document)
+                self.db.expunge(document)
+            except IntegrityError as e:
+                await self.db.rollback()
+                _remove_temp(tmp_path)
+                raise DuplicateDocumentError() from e
+            except Exception:
+                await self.db.rollback()
+                _remove_temp(tmp_path)
+                raise
 
         # 4. Move temp file to final storage.
         #    If this fails, delete the DB record so it does not become orphaned.
@@ -118,8 +122,33 @@ class DocumentService:
             await self.storage.move_from(tmp_path, final_filename)
         except Exception:
             logger.exception("File move failed after DB commit; rolling back DB record")
-            await self.db.delete(document)
-            await self.db.commit()
+            async with self._db_lock:
+                await self.db.delete(document)
+                await self.db.commit()
             raise
 
         return document
+
+    async def upload_document(self, file: UploadFile) -> Document:
+        """Upload a single document. Thin wrapper around ``_upload_single``."""
+        return await self._upload_single(file)
+
+    async def upload_batch(
+        self, files: list[UploadFile]
+    ) -> list[Document | BaseException]:
+        """Upload multiple files with bounded concurrency.
+
+        Returns one entry per file: either a ``Document`` on success or the
+        raised exception on failure.  A per-file failure never aborts the batch.
+        """
+        semaphore = asyncio.Semaphore(self.settings.UPLOAD_CONCURRENCY)
+
+        async def _guarded(file: UploadFile) -> Document:
+            async with semaphore:
+                return await self._upload_single(file)
+
+        results: list[Document | BaseException] = await asyncio.gather(
+            *(_guarded(f) for f in files),
+            return_exceptions=True,
+        )
+        return results

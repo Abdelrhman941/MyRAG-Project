@@ -197,9 +197,21 @@ async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Return the standard error shape for slowapi rate-limit violations."""
+    return _error_response(
+        request=request,
+        status_code=429,
+        code="rate_limit_exceeded",
+        message="Rate limit exceeded. Please try again later.",
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register all application-wide exception handlers."""
+    from slowapi.errors import RateLimitExceeded
 
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(
         RequestValidationError, request_validation_exception_handler

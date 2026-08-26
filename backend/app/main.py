@@ -15,6 +15,7 @@ from .core import (
     RequestLoggingMiddleware,
     Settings,
     get_settings,
+    limiter,
     setup_logging,
 )
 
@@ -34,6 +35,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=settings.APP_VERSION,
         description=settings.APP_DESCRIPTION,
     )
+
+    # Attach limiter so slowapi can find it on request.app.state.limiter.
+    app.state.limiter = limiter
 
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)

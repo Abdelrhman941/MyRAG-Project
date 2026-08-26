@@ -64,11 +64,18 @@ class FileTooLargeError(AppError):
     message = "File exceeds the maximum allowed size."
 
 
+class TooManyFilesError(AppError):
+    status_code = 400
+    code = "too_many_files"
+    message = "Too many files. Maximum 10 files per request."
+
+
 __all__ = [
     "AppError",
     "DuplicateDocumentError",
     "FileTooLargeError",
     "MissingFilenameError",
     "StorageError",
+    "TooManyFilesError",
     "UnsupportedDocumentTypeError",
 ]
