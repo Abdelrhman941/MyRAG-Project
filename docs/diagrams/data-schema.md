@@ -21,19 +21,19 @@ erDiagram
     }
 
     CHAT_SESSIONS {
-        uuid id PK "⏳"
-        string title "⏳ auto from first question"
-        text summary "⏳ nullable · rolling long-term memory"
-        datetime created_at "⏳"
-        datetime updated_at "⏳"
+        uuid id PK "✅"
+        string title "✅ auto from first question"
+        text summary "✅ nullable · rolling long-term memory"
+        datetime created_at "✅"
+        datetime updated_at "✅"
     }
 
     CHAT_MESSAGES {
-        uuid id PK "⏳"
-        uuid session_id FK "⏳ → chat_sessions.id · indexed · cascade delete"
-        enum role "⏳ user · assistant"
-        text content "⏳"
-        datetime created_at "⏳ · indexed"
+        uuid id PK "✅"
+        uuid session_id FK "✅ → chat_sessions.id · indexed · cascade delete"
+        enum role "✅ user · assistant"
+        text content "✅"
+        datetime created_at "✅ · indexed"
     }
 ```
 

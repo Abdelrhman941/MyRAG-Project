@@ -13,7 +13,7 @@ from ...dependencies import (
     get_storage,
     get_vector_store,
 )
-from ...infrastructure.db.session import async_session_maker
+from ...infrastructure.db.session import _get_session_maker
 from ...models import Document
 from ...schemas import (
     BatchUploadError,
@@ -35,7 +35,8 @@ async def run_ingestion_background(document_id: UUID) -> None:
     settings = get_settings()
     storage = get_storage()
     vector_store = get_vector_store(settings)
-    async with async_session_maker() as db:
+    maker = _get_session_maker()
+    async with maker() as db:
         service = IngestionService(db, storage, vector_store, settings)
         try:
             await service.ingest(document_id)

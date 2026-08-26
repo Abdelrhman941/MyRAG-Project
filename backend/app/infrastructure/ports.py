@@ -114,3 +114,13 @@ class SessionRepositoryPort(Protocol):
     async def update_title(self, session_id: UUID, title: str) -> None:
         """Update the title of a session."""
         ...
+
+
+class LLMProviderPort(Protocol):
+    """Port for an external LLM generation API."""
+
+    async def generate(
+        self, messages: list[dict[str, str]], temperature: float = 0.7
+    ) -> str:
+        """Generate a text response given a list of chat messages."""
+        ...

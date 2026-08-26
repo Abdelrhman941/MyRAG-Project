@@ -83,11 +83,11 @@ Full detail: [diagrams/data-schema.md](diagrams/data-schema.md).
 
 **SQLite (SQLAlchemy + Alembic):**
 - `documents` ✅ implemented — id (UUID PK), original_file_name, content_hash (UNIQUE), document_type, status, created_at
-- `chat_sessions` ⏳ — id (UUID PK), title, summary (nullable), created_at, updated_at
-- `chat_messages` ⏳ — id (UUID PK), session_id (FK → chat_sessions), role, content, created_at
+- `chat_sessions` ✅ — id (UUID PK), title, summary (nullable), created_at, updated_at
+- `chat_messages` ✅ — id (UUID PK), session_id (FK → chat_sessions), role, content, created_at
 
 **Qdrant:**
-- Collection `chunks` ⏳ — dense vector (BGE-M3, 1024-dim) + sparse vector; payload: document_id, chunk_index, text, original_file_name
+- Collection `chunks` ✅ — dense vector (BGE-M3, 1024-dim) + sparse vector; payload: document_id, chunk_index, text, original_file_name
 - Collection `chat_memory` 🔒 deferred (semantic long-term memory stage)
 
 ---
@@ -103,10 +103,10 @@ Full detail: [diagrams/api-interactions.md](diagrams/api-interactions.md).
 | `POST /api/v1/documents/batch` | ✅ | Upload up to 10 files, rate-limited 10/hour/IP |
 | `GET /api/v1/documents` | ⏳ | List documents |
 | `DELETE /api/v1/documents/{id}` | ⏳ | Delete document + its vectors |
-| `POST /api/v1/chat/sessions` | ⏳ | Create chat session |
-| `GET /api/v1/chat/sessions` | ⏳ | List sessions |
-| `GET /api/v1/chat/sessions/{id}/messages` | ⏳ | Session history |
-| `POST /api/v1/chat/sessions/{id}/messages` | ⏳ | Ask question → RAG answer |
+| `POST /api/v1/chat/sessions` | ✅ | Create chat session |
+| `GET /api/v1/chat/sessions` | ✅ | List sessions |
+| `GET /api/v1/chat/sessions/{id}/messages` | ✅ | Session history |
+| `POST /api/v1/chat/sessions/{id}/messages` | ✅ | Ask question → RAG answer |
 
 All errors use the standard shape: `{"error": {"code", "message", "details?", "request_id?"}}`.
 
@@ -132,9 +132,9 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 | File too large | 413 | `file_too_large` ✅ |
 | Duplicate content | 409 | `duplicate_document` ✅ |
 | Rate limit hit | 429 | `rate_limit_exceeded` ✅ |
-| Not found (doc/session) | 404 | `not_found` ⏳ |
+| Not found (doc/session) | 404 | `not_found` ✅ |
 | Storage failure | 500 | `storage_error` ✅ |
-| LLM provider failure | 502 | `llm_provider_error` ⏳ |
+| LLM provider failure | 502 | `llm_provider_error` ✅ |
 | Ingestion failure | document status → `failed` (no HTTP error to client) | ✅ |
 
 ---
@@ -148,6 +148,7 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - Single-file and batch upload with streaming, SHA-256 dedup, size limits, and `slowapi` rate limiting
 - Local filesystem storage adapter
 - Background ingestion pipeline (parsing, chunking, batched BGE-M3 embeddings, Qdrant hybrid vectors upsert)
+- Chat sessions, short-term and summary memory, hybrid retrieval fusion, and context-budget generation via Groq API
 
 **Not yet implemented ⏳** — see [progress/roadmap.md](progress/roadmap.md).
 

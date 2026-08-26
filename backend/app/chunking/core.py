@@ -7,7 +7,6 @@ from ..core import get_settings
 from ..models import Chunk, ParsedSegment
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 def chunk(segments: list[ParsedSegment], document_id: UUID) -> list[Chunk]:
@@ -22,6 +21,7 @@ def chunk(segments: list[ParsedSegment], document_id: UUID) -> list[Chunk]:
     full_text = "\n\n".join(seg.text for seg in segments)
 
     # Initialize the token-aware text splitter
+    settings = get_settings()
     splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         chunk_size=settings.CHUNK_SIZE_TOKENS,
         chunk_overlap=settings.CHUNK_OVERLAP_TOKENS,

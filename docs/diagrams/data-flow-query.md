@@ -2,22 +2,22 @@
 
 Parent: [../00-index.md](../00-index.md) · Spec: [../sdd.md](../sdd.md)
 
-How a user question becomes an answer, with memory. All stages ⏳ (planned).
+How a user question becomes an answer, with memory. All stages ✅ (implemented).
 
 ```mermaid
 flowchart TB
     U[/"Client: POST /api/v1/chat/sessions/{id}/messages<br/>{ question }"/]
 
     subgraph Request["Request path"]
-        LOAD["⏳ Load session via SessionRepositoryPort<br/>• last N messages (short-term window)<br/>• rolling summary (long-term)"]
-        QEMB["⏳ app/embeddings<br/>question → dense + sparse vector (BGE-M3)"]
-        QUERY["⏳ app/retrieval<br/>Qdrant Query API: hybrid dense+sparse → fusion<br/>→ top-k ranked Chunks"]
-        ASM["⏳ app/generation — prompt assembly<br/>system prompt + summary + last N messages<br/>+ retrieved chunks (cited) + question<br/>trimmed to token budget"]
-        LLM["⏳ app/infrastructure/llm_provider<br/>httpx → external LLM /chat/completions"]
-        PARSE["⏳ app/generation — parse response<br/>answer text"]
-        SAVE["⏳ Persist via SessionRepositoryPort<br/>user message + assistant message"]
-        SUM["⏳ Every K turns: update rolling summary<br/>(background, via LLM)"]
-        RESP[/"⏳ 200 { answer, sources: [document, chunk] }"/]
+        LOAD["✅ Load session via SessionRepositoryPort<br/>• last N messages (short-term window)<br/>• rolling summary (long-term)"]
+        QEMB["✅ app/embeddings<br/>question → dense + sparse vector (BGE-M3)"]
+        QUERY["✅ app/retrieval<br/>Qdrant Query API: hybrid dense+sparse → fusion<br/>→ top-k ranked Chunks"]
+        ASM["✅ app/generation — prompt assembly<br/>system prompt + summary + last N messages<br/>+ retrieved chunks (cited) + question<br/>trimmed to token budget"]
+        LLM["✅ app/infrastructure/llm_provider<br/>httpx → external LLM /chat/completions"]
+        PARSE["✅ app/generation — parse response<br/>answer text"]
+        SAVE["✅ Persist via SessionRepositoryPort<br/>user message + assistant message"]
+        SUM["✅ Every K turns: update rolling summary<br/>(background, via LLM)"]
+        RESP[/"✅ 200 { answer, sources: [document, chunk] }"/]
     end
 
     DB[("SQLite: chat_sessions · chat_messages")]

@@ -25,9 +25,10 @@ class MemoryManager:
         """Return True if a summary update is due."""
         # Update summary every K user-assistant turns (K * 2 messages).
         # Check if message_count % MEMORY_SUMMARY_EVERY_K == 0.
-        if message_count == 0:
+        k = self.settings.MEMORY_SUMMARY_EVERY_K
+        if k <= 0 or message_count == 0:
             return False
-        return message_count % self.settings.MEMORY_SUMMARY_EVERY_K == 0
+        return message_count % (k * 2) == 0
 
     def trim_to_budget(
         self, messages: list[ChatMessage], max_tokens: int

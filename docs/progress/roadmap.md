@@ -59,13 +59,13 @@ Spec: [stage-05-chat-sessions-memory.md](stage-05-chat-sessions-memory.md)
 - [x] Session CRUD endpoints
 - [x] Summary written: `stage-05-summary.md`
 
-## Stage 06 — Generation + Chat Endpoint ⬜
+## Stage 06 — Generation + Chat Endpoint ✅
 Spec: [stage-06-generation-chat.md](stage-06-generation-chat.md)
-- [ ] `LLMProviderPort` + `OpenAICompatibleLLM` adapter (httpx) + factory
-- [ ] `app/generation/` — prompt assembly with token budget + response parsing
-- [ ] `ChatService` = memory + retrieval + generation, sources in response
-- [ ] `POST /api/v1/chat/sessions/{id}/messages`
-- [ ] Summary written: `stage-06-summary.md`
+- [x] `LLMProviderPort` + `OpenAICompatibleLLM` adapter (httpx) + factory
+- [x] `app/generation/` — prompt assembly with token budget + response parsing
+- [x] `ChatService` = memory + retrieval + generation, sources in response
+- [x] `POST /api/v1/chat/sessions/{id}/messages`
+- [x] Summary written: `stage-06-summary.md`
 
 ## Stage 07 — Document Management ⬜
 Spec: [stage-07-document-management.md](stage-07-document-management.md)
@@ -91,4 +91,4 @@ Spec: [stage-09-hardening.md](stage-09-hardening.md)
 
 ---
 
-**Current stage:** 06 — Generation + Chat Endpoint
+**Current stage:** 07 — Document Management

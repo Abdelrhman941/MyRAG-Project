@@ -8,15 +8,14 @@ import aiofiles
 from ...core import get_settings
 from ...core.exceptions import StorageError
 
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
 class DocumentStorage:
     """Handles local filesystem storage for uploaded documents."""
 
-    def __init__(self, upload_dir: Path = settings.UPLOAD_DIR):
-        self.upload_dir = upload_dir
+    def __init__(self, upload_dir: Path | None = None):
+        self.upload_dir = upload_dir or get_settings().UPLOAD_DIR
 
     def _get_path(self, filename: str) -> Path:
         """Get the absolute path for a stored document."""

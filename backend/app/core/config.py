@@ -70,6 +70,13 @@ class Settings(BaseSettings):
     MEMORY_SHORT_TERM_N: int = 10
     MEMORY_SUMMARY_EVERY_K: int = 6
 
+    # ------------ LLM Generation ------------
+    LLM_BASE_URL: str = "https://api.groq.com/openai/v1"
+    LLM_API_KEY: str = "sk-dummy"
+    LLM_MODEL: str = "llama-3.1-8b-instant"
+    LLM_CONTEXT_TOKEN_BUDGET: int = 6000
+    LLM_TIMEOUT_S: int = 60
+
     @model_validator(mode="after")
     def _ensure_upload_dir(self) -> "Settings":
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
