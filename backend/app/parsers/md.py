@@ -2,6 +2,7 @@ import logging
 from typing import BinaryIO
 
 from markdown_it import MarkdownIt
+from markdown_it.token import Token
 
 from ..models import ParsedSegment
 from .utils import decode_text, normalize_text
@@ -22,9 +23,9 @@ def parse_md(stream: BinaryIO) -> list[ParsedSegment]:
     tokens = md.parse(raw_md)
 
     # 3. Extract text semantically
-    extracted_text = []
+    extracted_text: list[str] = []
 
-    def _extract(token_list):
+    def _extract(token_list: list[Token]) -> None:
         for token in token_list:
             if (
                 token.type == "text"

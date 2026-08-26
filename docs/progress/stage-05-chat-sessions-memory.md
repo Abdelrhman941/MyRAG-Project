@@ -11,7 +11,7 @@ Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) ·
 - `app/models/`: `ChatMessage` domain object (role, content, created_at).
 - `app/infrastructure/ports.py`: `SessionRepositoryPort` (create_session, get_session, list_sessions, delete_session, add_message, list_messages, get_recent_messages(n), update_summary, update_title).
 - `app/infrastructure/session_store/`: `SqliteSessionRepository` + `get_session_repository()` factory.
-- `app/memory/`: 
+- `app/memory/`:
   - `load_short_term(session_id)` → last N messages.
   - `should_update_summary(message_count)` → every K turns.
   - Token-budget trimmer used at prompt time (lives here, used by Stage 06).

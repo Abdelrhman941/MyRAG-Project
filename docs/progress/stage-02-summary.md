@@ -14,7 +14,7 @@ Date: 2026-08-26
 ## Decisions made
 - We decided to use standard Python `@dataclass(slots=True)` instead of `Pydantic` for `Chunk` and `ParsedSegment`. These structures act purely as intermediate, non-HTTP payload payloads during ingestion, so minimizing memory footprint and overhead for thousands of items is better than Pydantic's full validation.
 - Extracted shared decoding and normalization logic into `app/parsers/utils.py` to prevent cyclic module coupling back to `core.py` and clarify internal parser dependency flow.
-- We opted for the `DocumentStorage` returning `bytes` (as originally implemented in Stage 01 via `aiofiles`), so `io.BytesIO` was injected cleanly into format-specific libraries (`pypdf`, `python-docx`) without re-fetching from disk. 
+- We opted for the `DocumentStorage` returning `bytes` (as originally implemented in Stage 01 via `aiofiles`), so `io.BytesIO` was injected cleanly into format-specific libraries (`pypdf`, `python-docx`) without re-fetching from disk.
 - Included `document_id` inside the `ParsingError` payload details for clearer tracing during batch responses downstream.
 
 ## Deviations from spec

@@ -69,3 +69,9 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
 filterwarnings = ["error::DeprecationWarning"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "types-aiofiles>=25.1.0.20260518",
+]
