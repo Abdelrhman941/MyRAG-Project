@@ -35,14 +35,14 @@ Spec: [stage-02-parsing-chunking.md](stage-02-parsing-chunking.md)
 - [x] Tested manually with sample files
 - [x] Summary written: `stage-02-summary.md`
 
-## Stage 03 — Embeddings + Qdrant Storage ⬜
+## Stage 03 — Embeddings + Qdrant Storage ✅
 Spec: [stage-03-embeddings-qdrant.md](stage-03-embeddings-qdrant.md)
-- [ ] `app/embeddings/` — BGE-M3 lazy singleton (CPU, dense + sparse)
-- [ ] `VectorStorePort` + `QdrantVectorStore` adapter + factory
-- [ ] Qdrant collection `chunks` (dense + sparse, cosine)
-- [ ] `IngestionService`: parse → chunk → embed → upsert (one pass)
-- [ ] Wired into upload via BackgroundTasks; status → ready/failed
-- [ ] Summary written: `stage-03-summary.md`
+- [x] `app/embeddings/` — BGE-M3 lazy singleton (CPU, dense + sparse)
+- [x] `VectorStorePort` + `QdrantVectorStore` adapter + factory
+- [x] Qdrant collection `chunks` (dense + sparse, cosine)
+- [x] `IngestionService`: parse → chunk → embed → upsert (one pass)
+- [x] Wired into upload via BackgroundTasks; status → ready/failed
+- [x] Summary written: `stage-03-summary.md`
 
 ## Stage 04 — Retrieval ⬜
 Spec: [stage-04-retrieval.md](stage-04-retrieval.md)
@@ -91,4 +91,4 @@ Spec: [stage-09-hardening.md](stage-09-hardening.md)
 
 ---
 
-**Current stage:** 01 — Batch Upload + Rate Limiting
+**Current stage:** 04 — Retrieval

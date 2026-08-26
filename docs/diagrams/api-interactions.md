@@ -74,7 +74,7 @@ sequenceDiagram
 | Endpoint | SQLite | Filesystem | Qdrant | LLM API |
 |---|---|---|---|---|
 | `POST /documents` ✅ | insert document | write file | — | — |
-| `POST /documents/batch` ⏳ | insert ≤10 docs | write ≤10 files | (async) upsert | — |
+| `POST /documents/batch` ✅ | insert ≤10 docs | write ≤10 files | (async) upsert | — |
 | `GET /documents` ⏳ | select | — | — | — |
 | `DELETE /documents/{id}` ⏳ | delete row | delete file | delete by document_id | — |
 | `POST /chat/sessions` ⏳ | insert session | — | — | — |

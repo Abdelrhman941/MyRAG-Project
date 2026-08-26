@@ -18,7 +18,7 @@ from ..core.exceptions import (
     MissingFilenameError,
     UnsupportedDocumentTypeError,
 )
-from ..infrastructure import DocumentStorage
+from ..infrastructure import FileStoragePort
 from ..models import Document
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def _remove_temp(path: Path) -> None:
 class DocumentService:
     """Orchestrates document upload and persistence."""
 
-    def __init__(self, db: AsyncSession, storage: DocumentStorage, settings: Settings):
+    def __init__(self, db: AsyncSession, storage: FileStoragePort, settings: Settings):
         self.db = db
         self.storage = storage
         self.settings = settings

@@ -10,8 +10,8 @@ flowchart TB
     U[/"Client: POST /api/v1/documents[/batch]<br/>multipart/form-data"/]
 
     subgraph Request["Request path (synchronous)"]
-        RL["✅⏳ Rate limit check<br/>max 10 files/request · 10 req/hour/IP"]
-        VAL["✅ Validate per file<br/>filename present · extension in {pdf,txt,md,(docx)}<br/>size ≤ MAX_FILE_SIZE_MB (checked while streaming)"]
+        RL["✅ Rate limit check<br/>max 10 files/request · 10 req/hour/IP"]
+        VAL["✅ Validate per file<br/>filename present · extension in {pdf,txt,md,docx}<br/>size ≤ MAX_FILE_SIZE_MB (checked while streaming)"]
         TMP["✅ Stream to temp file<br/>compute SHA-256 + size in the same pass<br/>(no full file in memory)"]
         DEDUP{"✅ content_hash<br/>already in DB?"}
         REC["✅ Insert Document row<br/>status=uploaded · UNIQUE(content_hash)"]
@@ -20,14 +20,14 @@ flowchart TB
     end
 
     subgraph Background["Background ingestion (per file, bounded concurrency)"]
-        P1["⏳ status → processing"]
-        PARSE["⏳ app/parsers<br/>file → list[ParsedSegment]<br/>pypdf · plain text · markdown-it · docx"]
-        CHUNK["⏳ app/chunking<br/>ParsedSegment → list[Chunk]<br/>RecursiveCharacterTextSplitter (token-aware)"]
-        EMBED["⏳ app/embeddings<br/>Chunk texts → dense + sparse vectors<br/>BGE-M3 singleton (CPU, batched)"]
-        UPSERT["⏳ app/infrastructure/vector_store<br/>upsert into Qdrant collection 'chunks'<br/>payload: document_id · chunk_index · text · file name"]
-        P2{"⏳ success?"}
-        OK["⏳ status → ready"]
-        FAIL["⏳ status → failed<br/>(log event + reason)"]
+        P1["✅ status → processing"]
+        PARSE["✅ app/parsers<br/>file → list[ParsedSegment]<br/>pypdf · plain text · markdown-it · docx"]
+        CHUNK["✅ app/chunking<br/>ParsedSegment → list[Chunk]<br/>RecursiveCharacterTextSplitter (token-aware)"]
+        EMBED["✅ app/embeddings<br/>Chunk texts → dense + sparse vectors<br/>BGE-M3 singleton (CPU, batched)"]
+        UPSERT["✅ app/infrastructure/vector_store<br/>upsert into Qdrant collection 'chunks'<br/>payload: document_id · chunk_index · text · file name"]
+        P2{"✅ success?"}
+        OK["✅ status → ready"]
+        FAIL["✅ status → failed<br/>(log event + reason)"]
     end
 
     DB[("SQLite: documents")]
@@ -50,7 +50,7 @@ flowchart TB
 1. **Dedup by content, not name** — SHA-256 of the bytes; renamed duplicates are rejected. ✅
 2. **No orphan state** — temp file deleted on any failure; DB row deleted if the final move fails. ✅
 3. **Multi-file ≠ slow** — batch endpoint streams each file independently and runs
-   ingestion with an async semaphore (bounded concurrency), so N files don't mean N× latency. ⏳
+   ingestion with an async semaphore (bounded concurrency), so N files don't mean N× latency. ✅
 4. **One pipeline pass** — `IngestionService` runs parse→chunk→embed→upsert once per
    document; no stage recomputes another's output.
 5. **Failure visibility** — ingestion errors never leak to the upload response (client

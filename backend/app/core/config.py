@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     CHUNK_SIZE_TOKENS: Annotated[int, Field(gt=0)] = 512
     CHUNK_OVERLAP_TOKENS: Annotated[int, Field(ge=0)] = 64
 
+    # ------------ Embeddings & Vector Store ------------
+    QDRANT_URL: str = "http://localhost:6333"
+    EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    EMBEDDING_BATCH_SIZE: Annotated[int, Field(gt=0)] = 16
+
     @model_validator(mode="after")
     def _ensure_upload_dir(self) -> "Settings":
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

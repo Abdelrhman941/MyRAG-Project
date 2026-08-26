@@ -1,10 +1,19 @@
+import logging
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, File, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Request, UploadFile, status
 
-from ...core import limiter
+from ...core import get_settings, limiter
 from ...core.exceptions import AppError, TooManyFilesError
-from ...dependencies import SessionDep, SettingsDep, StorageDep
+from ...dependencies import (
+    SessionDep,
+    SettingsDep,
+    StorageDep,
+    get_storage,
+    get_vector_store,
+)
+from ...infrastructure.db.session import async_session_maker
 from ...models import Document
 from ...schemas import (
     BatchUploadError,
@@ -12,7 +21,27 @@ from ...schemas import (
     BatchUploadResult,
     DocumentResponse,
 )
-from ...services import DocumentService
+from ...services import DocumentService, IngestionService
+
+logger = logging.getLogger(__name__)
+
+
+async def run_ingestion_background(document_id: UUID) -> None:
+    """Background task: ingest a document after upload response has been sent.
+
+    Creates its own DB session and adapters because the request-scoped session
+    is closed by the time this runs.
+    """
+    settings = get_settings()
+    storage = get_storage()
+    vector_store = get_vector_store(settings)
+    async with async_session_maker() as db:
+        service = IngestionService(db, storage, vector_store, settings)
+        try:
+            await service.ingest(document_id)
+        except Exception:
+            logger.exception("Background ingestion failed for document %s", document_id)
+
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -25,6 +54,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 )
 @limiter.limit("10/hour")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     request: Request,
     file: UploadFile,
     db: SessionDep,
@@ -34,6 +64,7 @@ async def upload_document(
     """Upload a single document to the RAG system."""
     service = DocumentService(db, storage, settings)
     document = await service.upload_document(file)
+    background_tasks.add_task(run_ingestion_background, document.id)
     return DocumentResponse.model_validate(document)
 
 
@@ -45,6 +76,7 @@ async def upload_document(
 )
 @limiter.limit("10/hour")
 async def upload_batch(
+    background_tasks: BackgroundTasks,
     request: Request,
     files: Annotated[list[UploadFile], File(...)],
     db: SessionDep,
@@ -70,6 +102,7 @@ async def upload_batch(
     for file, outcome in zip(files, raw_results, strict=True):
         filename = file.filename or ""
         if isinstance(outcome, Document):
+            background_tasks.add_task(run_ingestion_background, outcome.id)
             results.append(
                 BatchUploadResult(
                     filename=filename,

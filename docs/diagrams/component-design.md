@@ -27,14 +27,14 @@ flowchart LR
 
     subgraph Adapters["app/infrastructure — concrete adapters"]
         LFS["file_storage/<br/>LocalDocumentStorage ✅"]
-        QVS["vector_store/<br/>QdrantVectorStore ⏳"]
+        QVS["vector_store/<br/>QdrantVectorStore ✅"]
         OAI["llm_provider/<br/>OpenAICompatibleLLM ⏳"]
         SQL["session_store/<br/>SqliteSessionRepository ⏳"]
     end
 
     subgraph Factory["app/dependencies.py — factories"]
         F1[get_storage ✅]
-        F2[get_vector_store ⏳]
+        F2[get_vector_store ✅]
         F3[get_llm_provider ⏳]
         F4[get_session_repository ⏳]
     end

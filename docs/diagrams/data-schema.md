@@ -15,7 +15,7 @@ erDiagram
         uuid id PK "✅"
         string original_file_name "✅ max 255"
         string content_hash UK "✅ SHA-256 hex · UNIQUE"
-        enum document_type "✅ pdf · txt · md (+ docx ⏳)"
+        enum document_type "✅ pdf · txt · md · docx"
         enum status "✅ uploaded · processing · ready · failed"
         datetime created_at "✅ tz-aware"
     }
@@ -44,7 +44,7 @@ erDiagram
 - Vectors are **not** stored in SQLite. Chunks live in Qdrant; the link is
   `document_id` + `chunk_index` in the payload.
 
-## Qdrant — Collection `chunks` ⏳
+## Qdrant — Collection `chunks` ✅
 
 ```mermaid
 flowchart LR

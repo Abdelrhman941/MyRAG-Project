@@ -45,7 +45,7 @@ class DocumentStorage:
             logger.exception("Storage read failed", exc_info=e)
             raise StorageError(message="Failed to read document.") from None
 
-    def delete(self, filename: str) -> None:
+    async def delete(self, filename: str) -> None:
         """Delete document from disk."""
         try:
             path = self._get_path(filename)

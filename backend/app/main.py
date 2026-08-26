@@ -36,7 +36,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description=settings.APP_DESCRIPTION,
     )
 
-    # Attach limiter so slowapi can find it on request.app.state.limiter.
     app.state.limiter = limiter
 
     app.add_middleware(RequestLoggingMiddleware)

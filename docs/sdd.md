@@ -99,8 +99,8 @@ Full detail: [diagrams/api-interactions.md](diagrams/api-interactions.md).
 | Endpoint | Status | Purpose |
 |---|---|---|
 | `GET /` | ✅ | App metadata |
-| `POST /api/v1/documents` | ✅ (single file) | Upload one document |
-| `POST /api/v1/documents/batch` | ⏳ | Upload up to 10 files, rate-limited 10/hour/IP |
+| `POST /api/v1/documents` | ✅ | Upload one document |
+| `POST /api/v1/documents/batch` | ✅ | Upload up to 10 files, rate-limited 10/hour/IP |
 | `GET /api/v1/documents` | ⏳ | List documents |
 | `DELETE /api/v1/documents/{id}` | ⏳ | Delete document + its vectors |
 | `POST /api/v1/chat/sessions` | ⏳ | Create chat session |
@@ -115,8 +115,8 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 ## 7. Business Rules
 
 1. **Deduplication:** identical content (SHA-256) is never stored twice, regardless of filename → `409 duplicate_document`. ✅ implemented
-2. **Rate limiting:** max 10 files per batch request; 10 upload requests/hour/IP. ⏳
-3. **Upload → ingestion decoupling:** upload returns `201` immediately with `status=uploaded`; ingestion runs as a background task and flips status to `ready`/`failed`.
+2. **Rate limiting:** max 10 files per batch request; 10 upload requests/hour/IP. ✅ implemented
+3. **Upload → ingestion decoupling:** upload returns `201` immediately with `status=uploaded`; ingestion runs as a background task and flips status to `ready`/`failed`. ✅ implemented
 4. **Client filenames are never filesystem paths.** Physical name = `<uuid><ext>`. ✅ implemented
 5. **Session isolation:** retrieval is scoped to all ready documents; chat history is scoped to its session only.
 6. **Memory budget:** prompt = system + summary + last N messages + retrieved chunks, trimmed to the model's context budget before sending.
@@ -131,11 +131,11 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 | Unsupported type | 422 | `unsupported_document_type` ✅ |
 | File too large | 413 | `file_too_large` ✅ |
 | Duplicate content | 409 | `duplicate_document` ✅ |
-| Rate limit hit | 429 | `rate_limit_exceeded` ⏳ |
+| Rate limit hit | 429 | `rate_limit_exceeded` ✅ |
 | Not found (doc/session) | 404 | `not_found` ⏳ |
 | Storage failure | 500 | `storage_error` ✅ |
 | LLM provider failure | 502 | `llm_provider_error` ⏳ |
-| Ingestion failure | document status → `failed` (no HTTP error to the client; it already got 201) | ⏳ |
+| Ingestion failure | document status → `failed` (no HTTP error to client) | ✅ |
 
 ---
 
@@ -145,8 +145,9 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - FastAPI app factory, request logging middleware, unified exception handlers
 - Settings (pydantic-settings), SQLite async engine/session
 - `Document` model + Alembic migration
-- Single-file upload with streaming, SHA-256 dedup, size limit, orphan-safe temp-file strategy
+- Single-file and batch upload with streaming, SHA-256 dedup, size limits, and `slowapi` rate limiting
 - Local filesystem storage adapter
+- Background ingestion pipeline (parsing, chunking, batched BGE-M3 embeddings, Qdrant hybrid vectors upsert)
 
 **Not yet implemented ⏳** — see [progress/roadmap.md](progress/roadmap.md).
 
@@ -154,8 +155,6 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 
 ## 10. Known Issues / Risks
 
-- Single-file upload only — batch endpoint not yet built.
-- No ingestion pipeline yet — uploaded documents sit at `status=uploaded`.
-- BGE-M3 first load downloads ~2 GB and occupies ~2–3 GB RAM — load as a lazy singleton, warn on startup.
+- BGE-M3 first load downloads ~2 GB and occupies ~2–3 GB RAM — lazy singleton implemented.
 - SQLite is fine at MVP scale; the session repository port exists so it can be swapped.
 - No auth — MVP is single-user local. Do not expose beyond localhost.
