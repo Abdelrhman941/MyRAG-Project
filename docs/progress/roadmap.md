@@ -44,20 +44,20 @@ Spec: [stage-03-embeddings-qdrant.md](stage-03-embeddings-qdrant.md)
 - [x] Wired into upload via BackgroundTasks; status → ready/failed
 - [x] Summary written: `stage-03-summary.md`
 
-## Stage 04 — Retrieval ⬜
+## Stage 04 — Retrieval ✅
 Spec: [stage-04-retrieval.md](stage-04-retrieval.md)
-- [ ] `app/retrieval/` — query embed → Qdrant Query API hybrid (dense+sparse, RRF fusion)
-- [ ] `RetrievalResult` domain object
-- [ ] Dense-only toggle via Settings (hybrid default)
-- [ ] Summary written: `stage-04-summary.md`
+- [x] `app/retrieval/` — query embed → Qdrant Query API hybrid (dense+sparse, RRF fusion)
+- [x] `RetrievalResult` domain object
+- [x] Dense-only toggle via Settings (hybrid default)
+- [x] Summary written: `stage-04-summary.md`
 
-## Stage 05 — Chat Sessions + Memory ⬜
+## Stage 05 — Chat Sessions + Memory ✅
 Spec: [stage-05-chat-sessions-memory.md](stage-05-chat-sessions-memory.md)
-- [ ] `chat_sessions` + `chat_messages` tables + Alembic migration
-- [ ] `SessionRepositoryPort` + `SqliteSessionRepository` + factory
-- [ ] `app/memory/` — short-term window (last N) + rolling summary (every K turns)
-- [ ] Session CRUD endpoints
-- [ ] Summary written: `stage-05-summary.md`
+- [x] `chat_sessions` + `chat_messages` tables + Alembic migration
+- [x] `SessionRepositoryPort` + `SqliteSessionRepository` + factory
+- [x] `app/memory/` — short-term window (last N) + rolling summary (every K turns)
+- [x] Session CRUD endpoints
+- [x] Summary written: `stage-05-summary.md`
 
 ## Stage 06 — Generation + Chat Endpoint ⬜
 Spec: [stage-06-generation-chat.md](stage-06-generation-chat.md)
@@ -91,4 +91,4 @@ Spec: [stage-09-hardening.md](stage-09-hardening.md)
 
 ---
 
-**Current stage:** 04 — Retrieval
+**Current stage:** 06 — Generation + Chat Endpoint

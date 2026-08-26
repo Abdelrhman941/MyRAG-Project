@@ -123,7 +123,9 @@ class DocumentService:
         except Exception:
             logger.exception("File move failed after DB commit; rolling back DB record")
             async with self._db_lock:
-                await self.db.delete(document)
+                from sqlalchemy import delete
+
+                await self.db.execute(delete(Document).where(Document.id == doc_id))
                 await self.db.commit()
             raise
 

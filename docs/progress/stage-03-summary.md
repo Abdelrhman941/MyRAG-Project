@@ -3,7 +3,7 @@
 ## What Was Done
 
 1.  **Dependencies & Environment:**
-    *   Added `sentence-transformers` and `qdrant-client` to `pyproject.toml`.
+    *   Added `flagembedding`, `transformers`, and `sentence-transformers` to `pyproject.toml`, resolving strict versioning conflicts (pinned to `1.2.10`, `4.39.3`, and `3.1.1` respectively) to guarantee CPU stability and avoid tokenization bugs with dict vs list inputs.
     *   Fought through extensive NTFS/WSL cross-filesystem locking issues to successfully install Torch 2.4.0+cpu and the required embedding libraries via `uv`.
     *   Created `docker-compose.yml` defining the `qdrant` container (`v1.11.0`) with standard persistent volumes and ports.
 
@@ -13,9 +13,8 @@
     *   Updated `dependencies.py` to wire `VectorStorePort` to `QdrantVectorStore`.
 
 3.  **Embeddings (BGE-M3):**
-    *   Created `app/embeddings/model.py` containing a thread-safe, lazy singleton wrapper around `SentenceTransformer("BAAI/bge-m3")`.
-    *   Implemented custom extraction logic within `EmbeddingModel._encode_sparse_batch()` to directly access the BGE-M3 `sparse_linear` layer (applied over the XLM-RoBERTa hidden states) to produce accurate SPLADE-style sparse lexical weight vectors.
-    *   Added a fallback mechanism to use embedding-norm weights if the specific model revision doesn't expose the custom `sparse_linear` attribute.
+    *   Created `app/embeddings/model.py` containing a thread-safe, lazy singleton wrapper natively using `BGEM3FlagModel` to encode both dense and sparse vectors natively.
+    *   Removed hacky monkeypatches and cleanly pinned models using `huggingface_hub.snapshot_download` against a fixed revision SHA.
 
 4.  **Vector Store (Qdrant):**
     *   Created `QdrantVectorStore` adapter in `app/infrastructure/vector_store/qdrant.py`.
@@ -25,6 +24,7 @@
 5.  **Service Orchestration (IngestionService):**
     *   Created `app/services/ingestion_service.py` to coordinate the full background ingestion lifecycle: Storage Read → Parse → Chunk → Embed (via `asyncio.to_thread` for the CPU-bound `encode_batch`) → Qdrant Upsert.
     *   Transitions `DocumentStatus` safely from `UPLOADED` → `PROCESSING` → `READY` (or `FAILED` with appropriate string reasons and logging).
+    *   Fixed failure paths to safely execute `delete_by_document` and properly handle detached objects during rollbacks.
 
 6.  **API Layer:**
     *   Updated `app/apis/v1/documents.py`. Both single `/documents` and `/documents/batch` upload endpoints now add `run_ingestion_background()` to FastAPI's `BackgroundTasks`.
@@ -33,18 +33,8 @@
 ## What Was Not Done (Deferred)
 
 *   **Reranking:** Deferred to a later stage as per the guidelines.
-*   **Querying/Retrieval:** The `query` method in `QdrantVectorStore` is stubbed out and raises `NotImplementedError`, deferred to Stage 04 (Retrieval).
-*   **Docker Execution:** Local Docker Desktop is unavailable in this specific WSL environment, so `docker-compose up` was skipped for verification.
 
 ## Next Steps
 
 *   Update the roadmap checkboxes to complete Stage 03.
 *   Proceed to Stage 04: Hybrid Retrieval.
-
-## Corrective Pass (Post-Implementation)
-- Fixed **BGE-M3 double forward pass**: Consolidated dense pooling and `sparse_linear` extraction into a single forward pass over the HF transformer to prevent duplicate compute and optimize memory.
-- **Removed Sparse Fallback**: Removed the `hidden.norm` heuristic. If `sparse_linear` is unavailable on the model, we now fail hard, preventing silent performance degradation for hybrid retrieval.
-- **Cleaned Up Error Handling**: Split embedding errors from Qdrant networking errors in `IngestionService` and ensured that `delete_by_document` runs on failure to wipe out any stale/partial points before entering the `FAILED` state.
-- **Fixed Qdrant Race Condition**: Caught potential `UnexpectedResponse` exceptions in `ensure_collection` when multiple background threads try to create the `chunks` collection simultaneously.
-- **Fixed Ports Layer**: `IngestionService` and `DocumentService` now depend fully on `FileStoragePort` (after adding `move_from` to the Protocol) instead of the concrete `DocumentStorage`, preserving the Ports & Adapters integrity.
-- **Max Length Alignment**: Configured `max_length=8192` explicitly in the BGE-M3 tokenizer so chunk texts up to 512 tokens (via `tiktoken`) are never silently truncated by the model's inner limits.

@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_BATCH_SIZE: Annotated[int, Field(gt=0)] = 16
 
+    # ------------ Retrieval ------------
+    RETRIEVAL_TOP_K: Annotated[int, Field(gt=0)] = 8
+    RETRIEVAL_HYBRID: bool = True
+
+    # ------------ Memory ------------
+    MEMORY_SHORT_TERM_N: int = 10
+    MEMORY_SUMMARY_EVERY_K: int = 6
+
     @model_validator(mode="after")
     def _ensure_upload_dir(self) -> "Settings":
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

@@ -27,7 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     setup_logging(
         json_logs=settings.ENVIRONMENT is Environment.PRODUCTION,
-        noisy_loggers={"sentence_transformers": logging.WARNING},
+        noisy_loggers={"transformers": logging.WARNING},
     )
 
     app = FastAPI(

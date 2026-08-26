@@ -106,5 +106,46 @@ class QdrantVectorStore:
         query_sparse: dict[int, float] | None,
         limit: int = 5,
     ) -> list[dict[str, Any]]:
-        """Query the vector store. (Stub for Stage 03)"""
-        raise NotImplementedError("Querying is deferred to Stage 04")
+        """Retrieve the top-*limit* chunks closest to the query vectors."""
+        if query_sparse is not None:
+            # Hybrid search via Query API
+            prefetch = [
+                rest.Prefetch(
+                    query=query_dense,
+                    using="dense",
+                    limit=limit * 2,
+                ),
+                rest.Prefetch(
+                    query=rest.SparseVector(
+                        indices=list(query_sparse.keys()),
+                        values=list(query_sparse.values()),
+                    ),
+                    using="sparse",
+                    limit=limit * 2,
+                ),
+            ]
+            response = await self.client.query_points(
+                collection_name=self.collection_name,
+                prefetch=prefetch,
+                query=rest.FusionQuery(fusion=rest.Fusion.RRF),
+                limit=limit,
+                with_payload=True,
+            )
+        else:
+            # Dense-only search
+            response = await self.client.query_points(
+                collection_name=self.collection_name,
+                query=query_dense,
+                using="dense",
+                limit=limit,
+                with_payload=True,
+            )
+
+        results = []
+        for point in response.points:
+            if point.payload is not None:
+                res = dict(point.payload)
+                res["_score"] = point.score
+                results.append(res)
+
+        return results

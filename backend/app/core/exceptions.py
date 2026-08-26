@@ -76,13 +76,36 @@ class ParsingError(AppError):
     message = "Failed to parse the document."
 
 
+class EmptyQueryError(AppError):
+    status_code = 400
+    code = "empty_query"
+    message = "Search query cannot be empty."
+
+
+class RetrievalError(AppError):
+    status_code = 502
+    code = "retrieval_unavailable"
+    message = "Search service is currently unavailable."
+
+
 __all__ = [
     "AppError",
     "DuplicateDocumentError",
+    "EmptyQueryError",
     "FileTooLargeError",
     "MissingFilenameError",
     "ParsingError",
+    "RetrievalError",
     "StorageError",
     "TooManyFilesError",
     "UnsupportedDocumentTypeError",
 ]
+
+
+class NotFoundError(AppError):
+    status_code = 404
+    code = "not_found"
+    message = "Resource not found."
+
+
+__all__.append("NotFoundError")

@@ -44,8 +44,8 @@ class VectorStorePort(Protocol):
     ) -> list[dict[str, Any]]:
         """Retrieve the top-*limit* chunks closest to the query vectors.
 
-        Not implemented in Stage 03 — raises NotImplementedError.
-        Stage 04 will implement hybrid retrieval here.
+        Performs a hybrid (dense + sparse) retrieval against the vector store
+        using RRF fusion.
         """
         ...
 
@@ -67,4 +67,50 @@ class FileStoragePort(Protocol):
 
     async def move_from(self, source_path: Path, filename: str) -> None:
         """Move a file from an absolute *source_path* to *filename*."""
+        ...
+
+
+class SessionRepositoryPort(Protocol):
+    """Port for chat session storage."""
+
+    async def create_session(self) -> UUID:
+        """Create a new session and return its ID."""
+        ...
+
+    async def get_session(self, session_id: UUID) -> dict[str, Any] | None:
+        """Return the session info (id, title, summary, created_at, updated_at)."""
+        ...
+
+    async def list_sessions(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """List sessions ordered by created_at desc."""
+        ...
+
+    async def delete_session(self, session_id: UUID) -> None:
+        """Delete a session and all its messages."""
+        ...
+
+    async def add_message(
+        self, session_id: UUID, role: str, content: str
+    ) -> dict[str, Any]:
+        """Add a message to the session."""
+        ...
+
+    async def list_messages(self, session_id: UUID) -> list[dict[str, Any]]:
+        """List all messages for a session (oldest first)."""
+        ...
+
+    async def get_recent_messages(
+        self, session_id: UUID, n: int
+    ) -> list[dict[str, Any]]:
+        """List the last N messages for a session (oldest first)."""
+        ...
+
+    async def update_summary(self, session_id: UUID, summary: str) -> None:
+        """Update the long-term summary for a session."""
+        ...
+
+    async def update_title(self, session_id: UUID, title: str) -> None:
+        """Update the title of a session."""
         ...
