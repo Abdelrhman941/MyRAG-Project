@@ -70,11 +70,18 @@ class TooManyFilesError(AppError):
     message = "Too many files. Maximum 10 files per request."
 
 
+class ParsingError(AppError):
+    status_code = 422
+    code = "parsing_failed"
+    message = "Failed to parse the document."
+
+
 __all__ = [
     "AppError",
     "DuplicateDocumentError",
     "FileTooLargeError",
     "MissingFilenameError",
+    "ParsingError",
     "StorageError",
     "TooManyFilesError",
     "UnsupportedDocumentTypeError",

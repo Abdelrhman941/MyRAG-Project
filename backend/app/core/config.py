@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     UPLOAD_RATE_LIMIT: str = "10/hour"
     UPLOAD_CONCURRENCY: Annotated[int, Field(gt=0)] = 4
 
+    # ------------ Chunking ------------
+    CHUNK_SIZE_TOKENS: Annotated[int, Field(gt=0)] = 512
+    CHUNK_OVERLAP_TOKENS: Annotated[int, Field(ge=0)] = 64
+
     @model_validator(mode="after")
     def _ensure_upload_dir(self) -> "Settings":
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

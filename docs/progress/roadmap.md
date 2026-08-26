@@ -27,13 +27,13 @@ Spec: [stage-01-batch-upload.md](stage-01-batch-upload.md)
 - [x] Bounded concurrency so multi-file upload doesn't degrade
 - [x] Summary written: `stage-01-summary.md`
 
-## Stage 02 — Parsing + Chunking ⬜
+## Stage 02 — Parsing + Chunking ✅
 Spec: [stage-02-parsing-chunking.md](stage-02-parsing-chunking.md)
-- [ ] `app/parsers/` — PDF (pypdf), TXT, MD (markdown-it-py), DOCX (python-docx)
-- [ ] `ParsedSegment` domain object in `app/models`
-- [ ] `app/chunking/` — RecursiveCharacterTextSplitter (token-aware)
-- [ ] `Chunk` domain object
-- [ ] Summary written: `stage-02-summary.md`
+- [x] Pure functions for parsing PDF, TXT, MD, DOCX
+- [x] Token-aware chunking (`langchain-text-splitters`)
+- [x] `ParsedSegment` and `Chunk` domain models
+- [x] Tested manually with sample files
+- [x] Summary written: `stage-02-summary.md`
 
 ## Stage 03 — Embeddings + Qdrant Storage ⬜
 Spec: [stage-03-embeddings-qdrant.md](stage-03-embeddings-qdrant.md)
