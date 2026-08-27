@@ -1,6 +1,6 @@
 'use client';
 
-import { createSessionAction } from '@/lib/api';
+import { bootstrapSessionAction } from '@/lib/api';
 import { useEffect, useRef } from 'react';
 
 export default function SplashPage() {
@@ -9,7 +9,7 @@ export default function SplashPage() {
   useEffect(() => {
     if (!called.current) {
       called.current = true;
-      createSessionAction();
+      bootstrapSessionAction();
     }
   }, []);
 

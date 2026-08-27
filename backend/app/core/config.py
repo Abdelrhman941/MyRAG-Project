@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     # ------------ LLM Generation ------------
     LLM_BASE_URL: str = "https://api.groq.com/openai/v1"
     LLM_API_KEY: str = "sk-dummy"
-    LLM_MODEL: str = "llama-3.1-8b-instant"
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
     LLM_CONTEXT_TOKEN_BUDGET: int = 6000
     LLM_TIMEOUT_S: int = 60
 

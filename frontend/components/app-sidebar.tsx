@@ -11,9 +11,23 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
+import { useDocuments } from '@/hooks/use-documents';
 import { createSessionAction, deleteSessionAction } from '@/lib/api';
-import { Files, Loader2, MessageSquare, PlusCircle, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Files,
+  Loader2,
+  MessageSquare,
+  PlusCircle,
+  Trash2,
+} from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -56,6 +70,8 @@ export function AppSidebar({
 
   const match = pathname.match(/\/chat\/([^\/]+)/);
   const activeSessionId = match ? match[1] : null;
+  const { documents } = useDocuments(activeSessionId);
+  const [isDocsExpanded, setIsDocsExpanded] = useState(true);
 
   return (
     <Sidebar>
@@ -90,13 +106,61 @@ export function AppSidebar({
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<a href={`/chat/${activeSessionId}/documents`} />}
-                    isActive={pathname === `/chat/${activeSessionId}/documents`}
-                  >
-                    <Files className="h-4 w-4" />
-                    <span>Knowledge Base</span>
-                  </SidebarMenuButton>
+                  <div className="flex items-center w-full">
+                    <SidebarMenuButton
+                      render={<a href={`/chat/${activeSessionId}/documents`} />}
+                      isActive={pathname === `/chat/${activeSessionId}/documents`}
+                      className="flex-1"
+                    >
+                      <Files className="h-4 w-4" />
+                      <span>Knowledge Base</span>
+                    </SidebarMenuButton>
+                    {documents.length > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setIsDocsExpanded(!isDocsExpanded);
+                        }}
+                        className="p-1.5 hover:bg-sidebar-accent rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors mr-1"
+                      >
+                        {isDocsExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  {documents.length > 0 && isDocsExpanded && (
+                    <SidebarMenuSub>
+                      {documents.slice(0, 5).map((doc) => (
+                        <SidebarMenuSubItem key={doc.id}>
+                          <div className="flex items-center gap-2 px-2 py-1.5 w-full text-sm text-sidebar-foreground/70">
+                            {doc.status === 'processing' || doc.status === 'uploaded' ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-yellow-500 shrink-0" />
+                            ) : doc.status === 'failed' ? (
+                              <AlertCircle className="h-3 w-3 text-red-500 shrink-0" />
+                            ) : (
+                              <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                            )}
+                            <span className="truncate flex-1" title={doc.original_file_name}>
+                              {doc.original_file_name}
+                            </span>
+                          </div>
+                        </SidebarMenuSubItem>
+                      ))}
+                      {documents.length > 5 && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            render={<a href={`/chat/${activeSessionId}/documents`} />}
+                            className="text-muted-foreground italic"
+                          >
+                            <span>+{documents.length - 5} more</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )}
+                    </SidebarMenuSub>
+                  )}
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
@@ -117,7 +181,7 @@ export function AppSidebar({
                     isActive={activeSessionId === session.id}
                     className="flex-1 truncate"
                   >
-                    <span className="truncate">{session.id.split('-')[0]}...</span>
+                    <span className="truncate">{session.title || 'New Chat'}</span>
                   </SidebarMenuButton>
                   <button
                     onClick={() => handleDelete(session.id)}

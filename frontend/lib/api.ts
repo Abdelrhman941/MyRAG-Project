@@ -98,6 +98,15 @@ export async function createSessionAction() {
   redirect(`/chat/${session.id}`);
 }
 
+export async function bootstrapSessionAction() {
+  const sessions = await getSessions();
+  if (sessions && sessions.length > 0) {
+    redirect(`/chat/${sessions[0].id}`);
+  } else {
+    await createSessionAction();
+  }
+}
+
 export async function deleteSessionAction(
   sessionId: string,
   currentSessionId: string | undefined,
@@ -152,13 +161,14 @@ export async function deleteDocumentAction(documentId: string, sessionId: string
 
 export async function uploadBatchAction(sessionId: string, formData: FormData) {
   try {
-    const results = await apiFetch<Document[]>(
+    const data = await apiFetch<{ results: { ok: boolean; document?: Document }[] }>(
       `/api/v1/chat/sessions/${sessionId}/documents/batch`,
       {
         method: 'POST',
         body: formData,
       }
     );
+    const results = data.results?.filter((r) => r.ok && r.document).map((r) => r.document) || [];
     revalidatePath(`/chat/${sessionId}/documents`);
     return { success: true, results };
   } catch (e: unknown) {
@@ -174,13 +184,23 @@ export async function uploadBatchAction(sessionId: string, formData: FormData) {
 
 export async function sendMessageAction(sessionId: string, question: string) {
   try {
-    const response = await apiFetch<Message>(`/api/v1/chat/sessions/${sessionId}/messages`, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await apiFetch<any>(`/api/v1/chat/sessions/${sessionId}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question }),
     });
-    revalidatePath(`/chat/${sessionId}`);
-    return { success: true, response };
+
+    const message: Message = {
+      id: `assistant-${Date.now()}`,
+      role: 'assistant',
+      content: data.answer,
+      sources: data.sources,
+      created_at: new Date().toISOString(),
+    };
+
+    revalidatePath('/chat', 'layout');
+    return { success: true, response: message };
   } catch (e: unknown) {
     return {
       success: false,

@@ -20,7 +20,9 @@ class QdrantVectorStore:
     """
 
     def __init__(self, settings: Settings) -> None:
-        self.client = AsyncQdrantClient(url=settings.QDRANT_URL)
+        self.client = AsyncQdrantClient(
+            url=settings.QDRANT_URL, check_compatibility=False
+        )
         self.collection_name = "chunks"
 
     async def ensure_collection(self) -> None:

@@ -10,11 +10,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { deleteDocumentAction, uploadBatchAction } from '@/lib/api';
 import { Document } from '@/lib/types';
 import { File, Loader2, Trash2, UploadCloud } from 'lucide-react';
-import { useEffect, useRef, useState, useTransition } from 'react';
-import { toast } from 'sonner';
+import { useEffect, useRef } from 'react';
+import { useDocuments } from '@/hooks/use-documents';
 
 export function DocumentManager({
   initialDocuments,
@@ -23,109 +22,19 @@ export function DocumentManager({
   initialDocuments: Document[];
   sessionId: string;
 }) {
-  const [documents, setDocuments] = useState<Document[]>(initialDocuments);
-  const [prevInitial, setPrevInitial] = useState<Document[]>(initialDocuments);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const { documents, setDocuments, isUploading, isPending, uploadFiles, handleDelete } = useDocuments(sessionId, initialDocuments);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Derived state to sync with server updates without useEffect cascading
-  if (initialDocuments !== prevInitial) {
-    setPrevInitial(initialDocuments);
-    setDocuments(initialDocuments);
-  }
-
-  // Polling logic
+  // Sync if initialDocuments change (from server actions revalidating)
   useEffect(() => {
-    const hasProcessing = documents.some(
-      (doc) => doc.status === 'processing' || doc.status === 'uploaded'
-    );
-    if (!hasProcessing) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/v1/chat/sessions/${sessionId}/documents`);
-        if (res.ok) {
-          const freshDocs: Document[] = await res.json();
-          setDocuments(freshDocs);
-        }
-      } catch (e: unknown) {
-        console.error('Polling error', e);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [documents, sessionId]);
+    setDocuments(initialDocuments);
+  }, [initialDocuments, setDocuments]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
-    if (files.length > 10) {
-      toast.error('You can only upload a maximum of 10 files at once.');
-      return;
-    }
-
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      if (files[i].size > 10 * 1024 * 1024) {
-        toast.error('One or more files exceed the maximum allowed file size.');
-        return;
-      }
-      formData.append('files', files[i]);
-    }
-
-    setIsUploading(true);
-
-    const optimisticDocs: Document[] = Array.from(files).map((f, i) => ({
-      id: `temp-${Date.now()}-${i}`,
-      original_file_name: f.name,
-      status: 'processing',
-      created_at: new Date().toISOString(),
-    }));
-    setDocuments((prev) => [...optimisticDocs, ...prev]);
-
-    const result = await uploadBatchAction(sessionId, formData);
-    setIsUploading(false);
-
-    if (!result.success) {
-      setDocuments((prev) => prev.filter((d) => !d.id.startsWith('temp-')));
-
-      const code = result.error?.code;
-      if (code === 'too_many_files')
-        toast.error('You can only upload a maximum of 10 files at once.');
-      else if (code === 'file_too_large')
-        toast.error('One or more files exceed the maximum allowed file size.');
-      else if (code === 'unsupported_document_type')
-        toast.error('Unsupported file type. Supported types are PDF, TXT, MD, and DOCX.');
-      else if (code === 'duplicate_document')
-        toast.error('This document already exists in the current session.');
-      else if (code === 'rate_limit_exceeded')
-        toast.error("You're moving too fast. Please try again in a moment.");
-      else toast.error(result.error?.message || 'Upload failed');
-    } else {
-      if (result.results) {
-        setDocuments((prev) => {
-          const clean = prev.filter((d) => !d.id.startsWith('temp-'));
-          return [...(result.results as Document[]), ...clean];
-        });
-      }
-      toast.success('Documents uploaded successfully.');
-    }
-
+    await uploadFiles(files);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleDelete = (docId: string) => {
-    setDocuments((prev) => prev.filter((d) => d.id !== docId));
-
-    startTransition(() => {
-      deleteDocumentAction(docId, sessionId).then((res) => {
-        if (!res.success) {
-          toast.error('Failed to delete document.');
-        }
-      });
-    });
   };
 
   return (

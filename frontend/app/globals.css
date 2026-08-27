@@ -46,6 +46,20 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --animate-sweep: sweep 2s linear infinite;
+  @keyframes sweep {
+    from {
+      transform: translateX(-50%);
+    }
+    to {
+      transform: translateX(50%);
+    }
+  }
+  --animate-shimmerText: shimmerText 2.5s linear infinite;
+  @keyframes shimmerText {
+    0% { background-position: 200% center; }
+    100% { background-position: -200% center; }
+  }
 }
 
 :root {

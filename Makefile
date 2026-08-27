@@ -4,6 +4,8 @@
 # Run Commands (Auto-kill existing process on port before start)
 # ------------------------------------------------------------------------------
 back-up: back-down
+	@echo "==> Starting Qdrant (via Docker)..."
+	@-docker.exe compose up -d qdrant || docker compose up -d qdrant || echo "⚠ Could not start Qdrant automatically. Please ensure Docker is running."
 	@echo "==> Backend starting..."
 	@cd backend && $(MAKE) run
 

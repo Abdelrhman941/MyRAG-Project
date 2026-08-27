@@ -7,7 +7,7 @@ sync:
 	uv lock && uv sync
 # -----------------------------------------------
 run:
-	uv run uvicorn app.main:app --reload --host 0.0.0.0
+	uv run uvicorn app.main:app --host 0.0.0.0
 # -----------------------------------------------
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

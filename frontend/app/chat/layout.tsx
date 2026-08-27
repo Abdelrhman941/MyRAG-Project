@@ -8,10 +8,10 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   return (
     <SidebarProvider>
       <AppSidebar initialSessions={sessions || []} />
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-background relative">
+        <div className="absolute top-3 left-3 z-50">
           <SidebarTrigger />
-        </header>
+        </div>
         <div className="flex-1 overflow-hidden relative">{children}</div>
       </main>
     </SidebarProvider>

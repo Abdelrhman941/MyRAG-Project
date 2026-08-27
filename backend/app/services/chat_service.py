@@ -102,10 +102,33 @@ class ChatService:
 
         # Auto-title the session if it's the very first exchange
         if len(all_msgs) == 2 and not session.get("title"):
-            title = question[:60]
-            background_tasks.add_task(self.repository.update_title, session_id, title)
+            background_tasks.add_task(self._generate_title, session_id, question)
 
         return ChatAnswer(answer=answer_text, sources=sources)
+
+    async def _generate_title(self, session_id: UUID, first_question: str) -> None:
+        try:
+            session = await self.repository.get_session(session_id)
+            if not session or session.get("title"):
+                return
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an assistant that creates a concise 3-6 word "
+                        "title for a chat based on the user's first message. "
+                        "Output ONLY the title, no quotes, no extra text."
+                    ),
+                },
+                {"role": "user", "content": first_question},
+            ]
+            title = await self.llm.generate(messages, temperature=0.5)
+            title = title.strip("\"'")
+            await self.repository.update_title(session_id, title)
+        except Exception as e:
+            logger.error(f"Failed to generate session title for {session_id}: {e}")
+            await self.repository.update_title(session_id, first_question[:60])
 
     async def _update_summary(self, session_id: UUID) -> None:
         try:
