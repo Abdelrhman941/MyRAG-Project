@@ -83,12 +83,12 @@ Spec: [stage-07b-session-scoping.md](stage-07b-session-scoping.md)
 - [x] Multi-system session deletion logic (Qdrant → FS → DB)
 - [x] Summary written: `stage-07b-summary.md`
 
-## Stage 08 — Frontend ⬜
+## Stage 08 — Frontend ✅
 Spec: [stage-08-frontend.md](stage-08-frontend.md)
-- [ ] Next.js (App Router) + pnpm + TailwindCSS + shadcn/ui
-- [ ] Base template from 21st.dev (`ai-chat`) — **strip everything unused**, keep only what serves our API
-- [ ] Chat UI: session list, message history, source citations
-- [ ] Upload UI: multi-file picker, per-file status, dedup/rate-limit errors surfaced
+- [x] Next.js (App Router) + pnpm + TailwindCSS + shadcn/ui
+- [x] Base template from 21st.dev (`ai-chat`) — **strip everything unused**, keep only what serves our API
+- [x] Chat UI: session list, message history, source citations
+- [x] Upload UI: multi-file picker, per-file status, dedup/rate-limit errors surfaced
 - [x] Summary written: `stage-08-summary.md`
 
 ## Stage 09 — Hardening (deferred items) ⬜
@@ -101,4 +101,4 @@ Spec: [stage-09-hardening.md](stage-09-hardening.md)
 
 ---
 
-**Current stage:** 08 — Frontend
+**Current stage:** 09 — Hardening
