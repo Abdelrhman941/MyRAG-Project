@@ -16,7 +16,7 @@ class RetrievalService:
         self.settings = settings
 
     async def retrieve(
-        self, query: str, top_k: int | None = None
+        self, query: str, session_id: UUID, top_k: int | None = None
     ) -> list[RetrievalResult]:
         if not query or not query.strip():
             raise EmptyQueryError()
@@ -35,7 +35,10 @@ class RetrievalService:
         # Query vector store
         try:
             raw_results = await self.vector_store.query(
-                query_dense=query_dense, query_sparse=query_sparse, limit=limit
+                query_dense=query_dense,
+                query_sparse=query_sparse,
+                session_id=session_id,
+                limit=limit,
             )
         except Exception as e:
             logger.exception("Failed to query vector store")

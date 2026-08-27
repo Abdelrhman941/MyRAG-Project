@@ -9,7 +9,7 @@ Parent: [../00-index.md](../00-index.md) · Spec: [../sdd.md](../sdd.md)
 ```mermaid
 sequenceDiagram
     actor C as Client (Next.js)
-    participant API as FastAPI apis/documents
+    participant API as FastAPI apis/chat
     participant RL as Rate limiter (slowapi)
     participant SVC as DocumentService
     participant DB as SQLite
@@ -17,7 +17,7 @@ sequenceDiagram
     participant BG as BackgroundTasks → IngestionService
     participant QD as VectorStorePort (Qdrant)
 
-    C->>API: POST /api/v1/documents/batch (≤10 files)
+    C->>API: POST /api/v1/chat/sessions/{session_id}/documents/batch (≤10 files)
     API->>RL: check IP quota (10/hour)
     RL--xC: 429 rate_limit_exceeded (if exceeded)
     loop each file (bounded concurrency)
@@ -73,12 +73,13 @@ sequenceDiagram
 
 | Endpoint | SQLite | Filesystem | Qdrant | LLM API |
 |---|---|---|---|---|
-| `POST /documents` ✅ | insert document | write file | — | — |
-| `POST /documents/batch` ✅ | insert ≤10 docs | write ≤10 files | (async) upsert | — |
-| `GET /documents` ✅ | select | — | — | — |
-| `DELETE /documents/{id}` ✅ | delete row | delete file | delete by document_id | — |
+| `POST /chat/sessions/{session_id}/documents` ✅ | insert document | write file | — | — |
+| `POST /chat/sessions/{session_id}/documents/batch` ✅ | insert ≤10 docs | write ≤10 files | (async) upsert | — |
+| `GET /chat/sessions/{session_id}/documents` ✅ | select | — | — | — |
+| `DELETE /chat/sessions/{session_id}` ✅ | delete row | delete file | delete by document_id | — |
 | `POST /chat/sessions` ✅ | insert session | — | — | — |
 | `GET /chat/sessions` ✅ | select | — | — | — |
+| `DELETE /chat/sessions/{id}` ✅ | delete session + docs | delete docs files | delete by document_id | — |
 | `GET /sessions/{id}/messages` ✅ | select | — | — | — |
 | `POST /sessions/{id}/messages` ✅ | read + insert | — | hybrid query | 1 call (+1 background summary) |
 

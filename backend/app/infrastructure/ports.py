@@ -40,6 +40,7 @@ class VectorStorePort(Protocol):
         self,
         query_dense: list[float],
         query_sparse: dict[int, float] | None,
+        session_id: UUID,
         limit: int = 5,
     ) -> list[dict[str, Any]]:
         """Retrieve the top-*limit* chunks closest to the query vectors.

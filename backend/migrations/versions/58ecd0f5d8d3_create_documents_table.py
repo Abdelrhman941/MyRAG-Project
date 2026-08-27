@@ -45,7 +45,7 @@ def upgrade() -> None:
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("content_hash"),
+        sa.UniqueConstraint("content_hash", name="uq_documents_content_hash"),
     )
     # ### end Alembic commands ###
 

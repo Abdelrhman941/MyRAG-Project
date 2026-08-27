@@ -3,8 +3,8 @@
 Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) · SST: [../sdd.md](../sdd.md)
 
 ## Goal
-- [ ] A client can upload up to 10 files in one request without degrading performance.
-- [ ] Upload abuse is prevented by an IP-based rate limit.
+- [x] A client can upload up to 10 files in one request without degrading performance.
+- [x] Upload abuse is prevented by an IP-based rate limit.
 
 ## Scope (In)
 - `POST /api/v1/documents/batch` accepting `Annotated[list[UploadFile], File(...)]`.
@@ -45,22 +45,22 @@ Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) ·
 - Storage failure on one file → that file errors; others continue.
 
 ## Implementation Steps
-- [ ] Add Settings fields (`MAX_FILES_PER_REQUEST`, `UPLOAD_RATE_LIMIT`, `UPLOAD_CONCURRENCY`).
-- [ ] Extract the per-file upload flow in `DocumentService` into a reusable private method (single source — used by both endpoints).
-- [ ] Extend `DocumentType` with DOCX + Alembic migration.
-- [ ] Add batch endpoint with semaphore-bounded `asyncio.gather` (return_exceptions pattern mapped to per-file results).
-- [ ] Add batch response schemas to `app/schemas/`.
-- [ ] Wire `slowapi` (limiter on app state, decorator on both upload routes).
-- [ ] Run verification commands from AGENTS.md §14.
+- [x] Add Settings fields (`MAX_FILES_PER_REQUEST`, `UPLOAD_RATE_LIMIT`, `UPLOAD_CONCURRENCY`).
+- [x] Extract the per-file upload flow in `DocumentService` into a reusable private method (single source — used by both endpoints).
+- [x] Extend `DocumentType` with DOCX + Alembic migration.
+- [x] Add batch endpoint with semaphore-bounded `asyncio.gather` (return_exceptions pattern mapped to per-file results).
+- [x] Add batch response schemas to `app/schemas/`.
+- [x] Wire `slowapi` (limiter on app state, decorator on both upload routes).
+- [x] Run verification commands from AGENTS.md §14.
 
 ## Manual Verification
-- [ ] Upload 3 mixed valid files in one request → 3 ok results, files on disk as `<uuid><ext>`, 3 DB rows.
-- [ ] Upload the same bytes twice under different names in one batch → first ok, second `duplicate_document`.
-- [ ] Upload 11 files → `400`.
-- [ ] Hit the endpoint 11 times within an hour from one IP → `429`.
-- [ ] Upload one 60 MB file (with default 50 MB limit) → per-file `file_too_large`, others ok.
+- [x] Upload 3 mixed valid files in one request → 3 ok results, files on disk as `<uuid><ext>`, 3 DB rows.
+- [x] Upload the same bytes twice under different names in one batch → first ok, second `duplicate_document`.
+- [x] Upload 11 files → `400`.
+- [x] Hit the endpoint 11 times within an hour from one IP → `429`.
+- [x] Upload one 60 MB file (with default 50 MB limit) → per-file `file_too_large`, others ok.
 
 ## Done When
-- [ ] All manual verification steps pass with recorded output.
-- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
-- [ ] `stage-01-summary.md` written; roadmap boxes ticked. STOP.
+- [x] All manual verification steps pass with recorded output.
+- [x] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [x] `stage-01-summary.md` written; roadmap boxes ticked. STOP.

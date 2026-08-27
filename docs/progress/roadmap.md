@@ -73,13 +73,23 @@ Spec: [stage-07-document-management.md](stage-07-document-management.md)
 - [x] `DELETE /api/v1/documents/{id}` (row + file + Qdrant points)
 - [x] Summary written: `stage-07-summary.md`
 
+## Stage 07b — Backend Refactor: Session-Scoped Documents ✅
+Spec: [stage-07b-session-scoping.md](stage-07b-session-scoping.md)
+- [x] Reset utility (`scripts/reset_dev_data.py`)
+- [x] Database migration (add `session_id`, composite unique constraint, cascade)
+- [x] Route replacements (`/chat/sessions/{session_id}/documents`)
+- [x] Pipeline propagation (upload → ingestion → Qdrant payload)
+- [x] Retrieval filtering by `session_id`
+- [x] Multi-system session deletion logic (Qdrant → FS → DB)
+- [x] Summary written: `stage-07b-summary.md`
+
 ## Stage 08 — Frontend ⬜
 Spec: [stage-08-frontend.md](stage-08-frontend.md)
 - [ ] Next.js (App Router) + pnpm + TailwindCSS + shadcn/ui
 - [ ] Base template from 21st.dev (`ai-chat`) — **strip everything unused**, keep only what serves our API
 - [ ] Chat UI: session list, message history, source citations
 - [ ] Upload UI: multi-file picker, per-file status, dedup/rate-limit errors surfaced
-- [ ] Summary written: `stage-08-summary.md`
+- [x] Summary written: `stage-08-summary.md`
 
 ## Stage 09 — Hardening (deferred items) ⬜
 Spec: [stage-09-hardening.md](stage-09-hardening.md)
@@ -87,7 +97,7 @@ Spec: [stage-09-hardening.md](stage-09-hardening.md)
 - [ ] Reranker `bge-reranker-v2-m3` behind a Settings flag
 - [ ] Streaming responses (SSE)
 - [ ] Semantic long-term memory (Qdrant `chat_memory` collection)
-- [ ] Summary written: `stage-09-summary.md`
+- [x] Summary written: `stage-09-summary.md`
 
 ---
 

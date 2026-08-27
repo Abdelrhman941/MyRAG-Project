@@ -3,7 +3,7 @@
 Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) · SST: [../sdd.md](../sdd.md)
 
 ## Goal
-- [ ] `POST /api/v1/chat/sessions/{id}/messages` answers questions using retrieved
+- [x] `POST /api/v1/chat/sessions/{id}/messages` answers questions using retrieved
       chunks + session memory, via an external LLM behind a swappable port.
 
 ## Scope (In)
@@ -47,20 +47,20 @@ Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) ·
 - No retrieved chunks → answer still generated but with an explicit "no relevant context found" system-prompt branch (never fabricate sources — `sources: []`).
 
 ## Implementation Steps
-- [ ] `LLMProviderPort` + adapter + factory + Settings fields.
-- [ ] `app/generation/` prompt builder + parser.
-- [ ] `ChatService` orchestration + summary trigger.
-- [ ] Router + schemas.
-- [ ] Run verification commands.
+- [x] `LLMProviderPort` + adapter + factory + Settings fields.
+- [x] `app/generation/` prompt builder + parser.
+- [x] `ChatService` orchestration + summary trigger.
+- [x] Router + schemas.
+- [x] Run verification commands.
 
 ## Manual Verification
-- [ ] Ask about an ingested document → coherent answer with correct sources.
-- [ ] Follow-up question ("tell me more about it") → resolved via short-term memory.
-- [ ] After K turns → session `summary` is populated in SQLite.
-- [ ] Kill the LLM endpoint → `502 llm_provider_error`, question still in history.
-- [ ] New session → no leakage of the previous session's history.
+- [x] Ask about an ingested document → coherent answer with correct sources.
+- [x] Follow-up question ("tell me more about it") → resolved via short-term memory.
+- [x] After K turns → session `summary` is populated in SQLite.
+- [x] Kill the LLM endpoint → `502 llm_provider_error`, question still in history.
+- [x] New session → no leakage of the previous session's history.
 
 ## Done When
-- [ ] Manual verification passes with recorded output.
-- [ ] Lint/format pass.
-- [ ] `stage-06-summary.md` written; roadmap boxes ticked. STOP.
+- [x] Manual verification passes with recorded output.
+- [x] Lint/format pass.
+- [x] `stage-06-summary.md` written; roadmap boxes ticked. STOP.

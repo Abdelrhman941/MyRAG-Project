@@ -3,7 +3,7 @@
 Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) · SST: [../sdd.md](../sdd.md)
 
 ## Goal
-- [ ] Uploaded documents automatically become searchable vectors in Qdrant, with no
+- [x] Uploaded documents automatically become searchable vectors in Qdrant, with no
       manual step and no performance hit on the upload response.
 
 ## Scope (In)
@@ -47,22 +47,22 @@ Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) ·
 - OOM-risk batch → reduce batch size via Settings; never load the whole document's chunks into one encode call.
 
 ## Implementation Steps
-- [ ] docker-compose: Qdrant service.
-- [ ] `app/embeddings/` singleton + batch encode API.
-- [ ] `VectorStorePort` + `QdrantVectorStore` + `get_vector_store()` factory.
-- [ ] `IngestionService` orchestrating Stage-02 outputs → Qdrant.
-- [ ] BackgroundTasks wiring in both upload routes.
-- [ ] Status transition logging (`event=ingestion.status` per transition).
-- [ ] Run verification commands.
+- [x] docker-compose: Qdrant service.
+- [x] `app/embeddings/` singleton + batch encode API.
+- [x] `VectorStorePort` + `QdrantVectorStore` + `get_vector_store()` factory.
+- [x] `IngestionService` orchestrating Stage-02 outputs → Qdrant.
+- [x] BackgroundTasks wiring in both upload routes.
+- [x] Status transition logging (`event=ingestion.status` per transition).
+- [x] Run verification commands.
 
 ## Manual Verification
-- [ ] `docker compose up -d` → Qdrant healthy.
-- [ ] Upload a PDF → response is immediate; within seconds the row flips to `ready`; Qdrant dashboard shows points with correct payloads.
-- [ ] Re-upload same content → `409`, zero new points.
-- [ ] Stop Qdrant, upload → row becomes `failed`, logs show the reason.
-- [ ] Upload 5 files in one batch → all reach `ready`; RAM stays within budget (watch `free -m`).
+- [x] `docker compose up -d` → Qdrant healthy.
+- [x] Upload a PDF → response is immediate; within seconds the row flips to `ready`; Qdrant dashboard shows points with correct payloads.
+- [x] Re-upload same content → `409`, zero new points.
+- [x] Stop Qdrant, upload → row becomes `failed`, logs show the reason.
+- [x] Upload 5 files in one batch → all reach `ready`; RAM stays within budget (watch `free -m`).
 
 ## Done When
-- [ ] Manual verification passes with recorded output.
-- [ ] Lint/format pass.
-- [ ] `stage-03-summary.md` written; roadmap boxes ticked. STOP.
+- [x] Manual verification passes with recorded output.
+- [x] Lint/format pass.
+- [x] `stage-03-summary.md` written; roadmap boxes ticked. STOP.

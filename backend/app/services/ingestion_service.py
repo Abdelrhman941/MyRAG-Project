@@ -87,6 +87,7 @@ class IngestionService:
             payload_metadata = {
                 "original_file_name": doc.original_file_name,
                 "created_at": doc.created_at.isoformat(),
+                "session_id": str(doc.session_id),
             }
 
             batch_size = self.settings.EMBEDDING_BATCH_SIZE

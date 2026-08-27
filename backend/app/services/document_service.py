@@ -51,7 +51,7 @@ class DocumentService:
         self.settings = settings
         self._db_lock = asyncio.Lock()
 
-    async def _upload_single(self, file: UploadFile) -> Document:
+    async def _upload_single(self, file: UploadFile, session_id: UUID) -> Document:
         """Core per-file upload: validate → stream → hash → dedup → persist → move.
 
         Strategy (avoids orphan DB records):
@@ -108,6 +108,7 @@ class DocumentService:
             content_hash=content_hash,
             document_type=doc_type,
             status=DocumentStatus.UPLOADED,
+            session_id=session_id,
         )
 
         async with self._db_lock:
@@ -141,12 +142,12 @@ class DocumentService:
 
         return document
 
-    async def upload_document(self, file: UploadFile) -> Document:
+    async def upload_document(self, file: UploadFile, session_id: UUID) -> Document:
         """Upload a single document. Thin wrapper around ``_upload_single``."""
-        return await self._upload_single(file)
+        return await self._upload_single(file, session_id)
 
     async def upload_batch(
-        self, files: list[UploadFile]
+        self, files: list[UploadFile], session_id: UUID
     ) -> list[Document | BaseException]:
         """Upload multiple files with bounded concurrency.
 
@@ -157,7 +158,7 @@ class DocumentService:
 
         async def _guarded(file: UploadFile) -> Document:
             async with semaphore:
-                return await self._upload_single(file)
+                return await self._upload_single(file, session_id)
 
         results: list[Document | BaseException] = await asyncio.gather(
             *(_guarded(f) for f in files),
@@ -165,10 +166,13 @@ class DocumentService:
         )
         return results
 
-    async def list_documents(self, limit: int = 50, offset: int = 0) -> list[Document]:
+    async def list_documents(
+        self, session_id: UUID, limit: int = 50, offset: int = 0
+    ) -> list[Document]:
         """List documents ordered by newest first."""
         stmt = (
             select(Document)
+            .where(Document.session_id == session_id)
             .order_by(Document.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -211,3 +215,29 @@ class DocumentService:
         async with self._db_lock:
             await self.db.delete(doc)
             await self.db.commit()
+
+    async def delete_session_data(self, session_id: UUID) -> None:
+        if not self.vector_store:
+            raise RuntimeError("vector_store is required for deletion")
+
+        docs = await self.list_documents(session_id, limit=10000)
+
+        # 1. Preflight check for PROCESSING status
+        for doc in docs:
+            if doc.status == DocumentStatus.PROCESSING:
+                raise DocumentProcessingConflictError()
+
+        # 2. Perform deletions
+        for doc in docs:
+            # Delete vectors
+            try:
+                await self.vector_store.delete_by_document(doc.id)
+            except Exception as e:
+                logger.exception("Failed to delete vectors for document %s", doc.id)
+                from ..core.exceptions import VectorStoreDeletionError
+
+                raise VectorStoreDeletionError() from e
+
+            # Delete file
+            filename = f"{doc.id}{doc.document_type.extension}"
+            await self.storage.delete(filename)

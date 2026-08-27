@@ -99,12 +99,13 @@ Full detail: [diagrams/api-interactions.md](diagrams/api-interactions.md).
 | Endpoint | Status | Purpose |
 |---|---|---|
 | `GET /` | ✅ | App metadata |
-| `POST /api/v1/documents` | ✅ | Upload one document |
-| `POST /api/v1/documents/batch` | ✅ | Upload up to 10 files, rate-limited 10/hour/IP |
-| `GET /api/v1/documents` | ✅ | List documents |
+| `POST /api/v1/chat/sessions/{id}/documents` | ✅ | Upload one document |
+| `POST /api/v1/chat/sessions/{id}/documents/batch` | ✅ | Upload up to 10 files, rate-limited 10/hour/IP |
+| `GET /api/v1/chat/sessions/{id}/documents` | ✅ | List documents |
 | `DELETE /api/v1/documents/{id}` | ✅ | Delete document + its vectors |
 | `POST /api/v1/chat/sessions` | ✅ | Create chat session |
 | `GET /api/v1/chat/sessions` | ✅ | List sessions |
+| `DELETE /api/v1/chat/sessions/{id}` | ✅ | Delete session + docs + vectors |
 | `GET /api/v1/chat/sessions/{id}/messages` | ✅ | Session history |
 | `POST /api/v1/chat/sessions/{id}/messages` | ✅ | Ask question → RAG answer |
 
@@ -151,7 +152,7 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - Chat sessions, short-term and summary memory, hybrid retrieval fusion, and context-budget generation via Groq API
 - Document Management endpoints (list and complete deletion across DB, File, and Vector Store)
 
-**Not yet implemented ⏳** — see [progress/roadmap.md](progress/roadmap.md).
+**Not yet implemented** — see [progress/roadmap.md](progress/roadmap.md).
 
 ---
 

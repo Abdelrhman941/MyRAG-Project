@@ -11,6 +11,7 @@ class DocumentResponse(BaseModel):
     """Response schema for document metadata."""
 
     id: UUID
+    session_id: UUID
     original_file_name: str
     document_type: DocumentType
     status: DocumentStatus
@@ -39,7 +40,7 @@ class BatchUploadResult(BaseModel):
 
 
 class BatchUploadResponse(BaseModel):
-    """Response for ``POST /api/v1/documents/batch``."""
+    """Response for ``POST /api/v1/chat/sessions/{session_id}/documents/batch``."""
 
     results: list[BatchUploadResult]
 

@@ -104,8 +104,18 @@ class QdrantVectorStore:
         self,
         query_dense: list[float],
         query_sparse: dict[int, float] | None,
+        session_id: UUID,
         limit: int = 5,
     ) -> list[dict[str, Any]]:
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        session_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="session_id", match=MatchValue(value=str(session_id))
+                )
+            ]
+        )
         """Retrieve the top-*limit* chunks closest to the query vectors."""
         if query_sparse is not None:
             # Hybrid search via Query API
@@ -127,6 +137,7 @@ class QdrantVectorStore:
             response = await self.client.query_points(
                 collection_name=self.collection_name,
                 prefetch=prefetch,
+                query_filter=session_filter,
                 query=rest.FusionQuery(fusion=rest.Fusion.RRF),
                 limit=limit,
                 with_payload=True,
@@ -139,6 +150,7 @@ class QdrantVectorStore:
                 using="dense",
                 limit=limit,
                 with_payload=True,
+                query_filter=session_filter,
             )
 
         results = []

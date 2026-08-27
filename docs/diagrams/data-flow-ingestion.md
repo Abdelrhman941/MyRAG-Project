@@ -3,7 +3,7 @@
 Parent: [../00-index.md](../00-index.md) · Spec: [../sdd.md](../sdd.md)
 
 How a file moves through the system, from upload to searchable vectors.
-✅ = implemented · ⏳ = planned
+✅ = implemented
 
 ```mermaid
 flowchart TB

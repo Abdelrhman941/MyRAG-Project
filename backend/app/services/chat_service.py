@@ -57,7 +57,7 @@ class ChatService:
         await self.repository.add_message(session_id, "user", question)
 
         # 3. Retrieve Chunks
-        chunks = await self.retrieval_service.retrieve(question)
+        chunks = await self.retrieval_service.retrieve(question, session_id)
 
         # 4. Load memory (which now includes the user's question)
         history = await self.memory.load_short_term(session_id)

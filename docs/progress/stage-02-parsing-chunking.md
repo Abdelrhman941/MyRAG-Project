@@ -3,7 +3,7 @@
 Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) · SST: [../sdd.md](../sdd.md)
 
 ## Goal
-- [ ] Any stored document can be converted into embedding-ready `Chunk` objects.
+- [x] Any stored document can be converted into embedding-ready `Chunk` objects.
 
 ## Scope (In)
 - `app/models/`: `ParsedSegment` and `Chunk` domain objects (dataclasses or Pydantic — pick one, document why).
@@ -44,18 +44,18 @@ Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) ·
 - A single bad segment must not discard the rest of the document — skip + log warning.
 
 ## Implementation Steps
-- [ ] Add `ParsedSegment`, `Chunk` to `app/models/`.
-- [ ] Add `ParsingError` to `app/core/exceptions.py`.
-- [ ] Implement the 4 parsers behind the single `parse()` entry point.
-- [ ] Implement `chunk()` with the token-aware splitter, parameters from Settings.
-- [ ] Run verification commands.
+- [x] Add `ParsedSegment`, `Chunk` to `app/models/`.
+- [x] Add `ParsingError` to `app/core/exceptions.py`.
+- [x] Implement the 4 parsers behind the single `parse()` entry point.
+- [x] Implement `chunk()` with the token-aware splitter, parameters from Settings.
+- [x] Run verification commands.
 
 ## Manual Verification
-- [ ] Parse + chunk a real PDF, TXT, MD, and DOCX; print segment/chunk counts and the first chunk's text for each — eyeball that text is clean and ordered.
-- [ ] A scanned-image PDF returns `[]` without raising.
-- [ ] Chunk sizes respect the token settings (sample-check with `tiktoken`).
+- [x] Parse + chunk a real PDF, TXT, MD, and DOCX; print segment/chunk counts and the first chunk's text for each — eyeball that text is clean and ordered.
+- [x] A scanned-image PDF returns `[]` without raising.
+- [x] Chunk sizes respect the token settings (sample-check with `tiktoken`).
 
 ## Done When
-- [ ] Manual verification passes with recorded output.
-- [ ] Lint/format pass.
-- [ ] `stage-02-summary.md` written; roadmap boxes ticked. STOP.
+- [x] Manual verification passes with recorded output.
+- [x] Lint/format pass.
+- [x] `stage-02-summary.md` written; roadmap boxes ticked. STOP.

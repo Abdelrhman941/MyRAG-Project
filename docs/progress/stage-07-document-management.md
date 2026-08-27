@@ -3,7 +3,7 @@
 Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) · SST: [../sdd.md](../sdd.md)
 
 ## Goal
-- [ ] Users can list their documents and delete one completely (DB row + file + vectors).
+- [x] Users can list their documents and delete one completely (DB row + file + vectors).
 
 ## Scope (In)
 - `GET /api/v1/documents` → ordered list of `DocumentResponse` (newest first).
@@ -29,17 +29,17 @@ Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) ·
 - File already missing on disk → log warning, continue deletion (idempotent).
 
 ## Implementation Steps
-- [ ] `VectorStorePort.delete_by_document` implementation.
-- [ ] Service methods `list_documents`, `delete_document` in `DocumentService`.
-- [ ] Routers + schemas.
-- [ ] Run verification commands.
+- [x] `VectorStorePort.delete_by_document` implementation.
+- [x] Service methods `list_documents`, `delete_document` in `DocumentService`.
+- [x] Routers + schemas.
+- [x] Run verification commands.
 
 ## Manual Verification
-- [ ] List after several uploads → correct order and statuses.
-- [ ] Delete a `ready` document → row gone, file gone, Qdrant count drops by its chunk count; retrieval no longer returns its chunks.
-- [ ] Delete unknown id → 404. Delete a `processing` document → 409.
+- [x] List after several uploads → correct order and statuses.
+- [x] Delete a `ready` document → row gone, file gone, Qdrant count drops by its chunk count; retrieval no longer returns its chunks.
+- [x] Delete unknown id → 404. Delete a `processing` document → 409.
 
 ## Done When
-- [ ] Manual verification passes with recorded output.
-- [ ] Lint/format pass.
-- [ ] `stage-07-summary.md` written; roadmap boxes ticked. STOP.
+- [x] Manual verification passes with recorded output.
+- [x] Lint/format pass.
+- [x] `stage-07-summary.md` written; roadmap boxes ticked. STOP.

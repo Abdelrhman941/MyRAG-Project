@@ -3,7 +3,7 @@
 Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) · SST: [../sdd.md](../sdd.md)
 
 ## Goal
-- [ ] A natural-language question returns the top-k most relevant chunks via hybrid search.
+- [x] A natural-language question returns the top-k most relevant chunks via hybrid search.
 
 ## Scope (In)
 - `app/models/`: `RetrievalResult` domain object (chunk + score).
@@ -42,20 +42,20 @@ Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) ·
 - Empty result → return `[]` (not an error).
 
 ## Implementation Steps
-- [ ] `RetrievalResult` in `app/models/`.
-- [ ] `RetrievalError` in `app/core/exceptions.py`.
-- [ ] `VectorStorePort.query` implementation (Query API, prefetch+RRF; dense-only branch when hybrid=false).
-- [ ] `RetrievalService` (embed → port call → map to domain objects).
-- [ ] Verification hook script.
-- [ ] Run verification commands.
+- [x] `RetrievalResult` in `app/models/`.
+- [x] `RetrievalError` in `app/core/exceptions.py`.
+- [x] `VectorStorePort.query` implementation (Query API, prefetch+RRF; dense-only branch when hybrid=false).
+- [x] `RetrievalService` (embed → port call → map to domain objects).
+- [x] Verification hook script.
+- [x] Run verification commands.
 
 ## Manual Verification
-- [ ] Ingest 2–3 distinct documents; ask a question answerable from exactly one → top results come from that document.
-- [ ] Toggle `RETRIEVAL_HYBRID=false` → still returns sensible results.
-- [ ] Query with an unrelated phrase → low scores / empty; no crash.
-- [ ] Record timings: embed + query should be well under 1 s on CPU.
+- [x] Ingest 2–3 distinct documents; ask a question answerable from exactly one → top results come from that document.
+- [x] Toggle `RETRIEVAL_HYBRID=false` → still returns sensible results.
+- [x] Query with an unrelated phrase → low scores / empty; no crash.
+- [x] Record timings: embed + query should be well under 1 s on CPU.
 
 ## Done When
-- [ ] Manual verification passes with recorded output.
-- [ ] Lint/format pass.
-- [ ] `stage-04-summary.md` written; roadmap boxes ticked. STOP.
+- [x] Manual verification passes with recorded output.
+- [x] Lint/format pass.
+- [x] `stage-04-summary.md` written; roadmap boxes ticked. STOP.

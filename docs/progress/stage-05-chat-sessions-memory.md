@@ -3,7 +3,7 @@
 Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) · SST: [../sdd.md](../sdd.md)
 
 ## Goal
-- [ ] Users can create multiple independent chat sessions, each with persistent
+- [x] Users can create multiple independent chat sessions, each with persistent
       history and a rolling long-term summary — all in SQLite behind a swappable port.
 
 ## Scope (In)
@@ -42,18 +42,18 @@ Parent: [roadmap.md](roadmap.md) · Rules: [../../AGENTS.md](../../AGENTS.md) ·
 - Empty title auto-derivation (whitespace message) → fallback title `New chat`.
 
 ## Implementation Steps
-- [ ] Models + migration.
-- [ ] `SessionRepositoryPort` + SQLite adapter + factory.
-- [ ] `app/memory/` helpers.
-- [ ] Schemas + routers under `apis/v1/chat.py`.
-- [ ] Run verification commands + `alembic check`.
+- [x] Models + migration.
+- [x] `SessionRepositoryPort` + SQLite adapter + factory.
+- [x] `app/memory/` helpers.
+- [x] Schemas + routers under `apis/v1/chat.py`.
+- [x] Run verification commands + `alembic check`.
 
 ## Manual Verification
-- [ ] Create 2 sessions; add messages to each via repository; confirm isolation.
-- [ ] Delete a session → its messages are gone (cascade).
-- [ ] `alembic check` passes; `alembic downgrade -1 && upgrade head` round-trips.
+- [x] Create 2 sessions; add messages to each via repository; confirm isolation.
+- [x] Delete a session → its messages are gone (cascade).
+- [x] `alembic check` passes; `alembic downgrade -1 && upgrade head` round-trips.
 
 ## Done When
-- [ ] Manual verification passes with recorded output.
-- [ ] Lint/format pass.
-- [ ] `stage-05-summary.md` written; roadmap boxes ticked. STOP.
+- [x] Manual verification passes with recorded output.
+- [x] Lint/format pass.
+- [x] `stage-05-summary.md` written; roadmap boxes ticked. STOP.
