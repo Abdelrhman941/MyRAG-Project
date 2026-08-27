@@ -1,7 +1,7 @@
 'use client';
 
 import { useDocuments } from '@/hooks/use-documents';
-import { sendMessageAction, getRagPhaseAction } from '@/lib/api';
+import { sendMessageAction, getRagPhaseAction, getReadyStatusAction } from '@/lib/api';
 import { useEffect, useRef, useState } from 'react';
 import { AgentChat, AgentMessage, RagPhase } from './ui/agent-chat';
 
@@ -18,11 +18,46 @@ export function MessageFeed({
   const { uploadFiles, isUploading } = useDocuments(sessionId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Poll the backend RAG phase while a response is in-flight.
-  // Stops automatically when isPending becomes false (response arrived).
   const [polledPhase, setPolledPhase] = useState<RagPhase>('idle');
-  // Derive displayed phase: always 'idle' when not waiting for a response
   const ragPhase: RagPhase = isPending ? polledPhase : 'idle';
+
+  const [modelReady, setModelReady] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (modelReady) return;
+
+    let isCancelled = false;
+    const pollModelReady = async () => {
+      try {
+        const res = await getReadyStatusAction();
+        if (isCancelled) return;
+
+        if (res.status === 'ready') {
+          setModelReady(true);
+          setModelError(null);
+        } else if (res.status === 'warming') {
+          setModelError(null);
+        } else {
+          setModelError(res.detail || 'Failed to load model');
+        }
+      } catch (e: unknown) {
+        if (!isCancelled) setModelError((e as Error).message || 'Connection failed');
+      }
+    };
+
+    pollModelReady();
+    const interval = setInterval(() => {
+      if (!modelReady && !modelError) {
+        pollModelReady();
+      }
+    }, 2000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [modelReady, modelError]);
 
   useEffect(() => {
     if (!isPending) return;
@@ -36,13 +71,11 @@ export function MessageFeed({
       }
     };
 
-    // Poll immediately then every 300ms
     poll();
     const interval = setInterval(poll, 300);
     return () => clearInterval(interval);
   }, [isPending, sessionId]);
 
-  // Convert internal messages to AgentMessage format
   const agentMessages: AgentMessage[] = messages.map((m, idx) => {
     let content = m.content;
     if (m.sources && m.sources.length > 0) {
@@ -110,7 +143,7 @@ export function MessageFeed({
   };
 
   return (
-    <div className="flex flex-col h-full bg-background dark:bg-[#212121]">
+    <div className="flex flex-col h-full bg-background dark:bg-[#212121] relative">
       <input
         type="file"
         multiple
@@ -119,12 +152,31 @@ export function MessageFeed({
         onChange={handleFileChange}
         accept=".pdf,.txt,.md,.docx"
       />
+
+      {!modelReady && !modelError && (
+        <div className="absolute top-0 left-0 right-0 bg-blue-500/10 text-blue-700 dark:text-blue-400 p-3 text-center text-sm flex items-center justify-center gap-3 z-10 border-b border-blue-500/20 backdrop-blur-sm">
+          <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+          Loading the AI model — first boot can take a minute…
+        </div>
+      )}
+
+      {modelError && (
+        <div className="absolute top-0 left-0 right-0 bg-red-500/10 text-red-700 dark:text-red-400 p-3 text-center text-sm flex items-center justify-center gap-3 z-10 border-b border-red-500/20 backdrop-blur-sm">
+          <span>Failed to load AI model: {modelError}</span>
+          <button onClick={() => { setModelError(null); setModelReady(false); }} className="underline font-semibold hover:text-red-800 dark:hover:text-red-300">
+            Retry
+          </button>
+        </div>
+      )}
+
       <AgentChat
         messages={agentMessages}
         status={isPending ? 'streaming' : 'ready'}
         ragPhase={ragPhase}
         onSend={handleSend}
         emptyStatePosition="center"
+        disabled={!modelReady}
+        placeholder={!modelReady ? 'Waiting for model...' : 'Message...'}
         attachments={{
           onAttach: () => fileInputRef.current?.click(),
           isUploading,

@@ -65,13 +65,16 @@ Full detail: [diagrams/component-design.md](diagrams/component-design.md).
 - Ingestion: [diagrams/data-flow-ingestion.md](diagrams/data-flow-ingestion.md)
 - Query: [diagrams/data-flow-query.md](diagrams/data-flow-query.md)
 
+**Application lifecycle:**
+`Server boot → FastAPI lifespan context triggers BGE-M3 background load → /readyz returns 200 when complete`
+
 **Ingestion lifecycle:**
 `Upload → validate (type/size/rate) → stream to temp + SHA-256 → dedup check →
 DB record (status=uploaded) → move to final path → background: parse → chunk →
 embed (BGE-M3 dense+sparse) → upsert Qdrant → status=ready (or failed)`
 
 **Query lifecycle:**
-`Question → load session (short-term window + rolling summary) → embed query →
+`Question → load session (short-term window + rolling summary) → embed query (using pre-loaded model) →
 Qdrant hybrid query (Query API fusion) → assemble prompt (system + memory +
 chunks + question) → external LLM → persist messages → answer`
 
@@ -99,6 +102,8 @@ Full detail: [diagrams/api-interactions.md](diagrams/api-interactions.md).
 | Endpoint | Status | Purpose |
 |---|---|---|
 | `GET /` | ✅ | App metadata |
+| `GET /healthz` | ✅ | Liveness probe (always 200 ok) |
+| `GET /readyz` | ✅ | Readiness probe (503 while warming, 200 when ready) |
 | `POST /api/v1/chat/sessions/{id}/documents` | ✅ | Upload one document |
 | `POST /api/v1/chat/sessions/{id}/documents/batch` | ✅ | Upload up to 10 files, rate-limited 10/hour/IP |
 | `GET /api/v1/chat/sessions/{id}/documents` | ✅ | List documents |
@@ -151,6 +156,7 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - Background ingestion pipeline (parsing, chunking, batched BGE-M3 embeddings, Qdrant hybrid vectors upsert)
 - Chat sessions, short-term and summary memory, hybrid retrieval fusion, and context-budget generation via Groq API
 - Document Management endpoints (list and complete deletion across DB, File, and Vector Store)
+- Model warm-up & readiness (BGE-M3 pre-loads at server boot via lifespan, `/healthz` and `/readyz` endpoints, UI blocks input until ready)
 
 **Not yet implemented** — see [progress/roadmap.md](progress/roadmap.md).
 
@@ -158,6 +164,6 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 
 ## 10. Known Issues / Risks
 
-- BGE-M3 first load downloads ~2 GB and occupies ~2–3 GB RAM — lazy singleton implemented.
+- BGE-M3 first load downloads ~2 GB and occupies ~2–3 GB RAM — lazy singleton implemented and pre-loaded on boot.
 - SQLite is fine at MVP scale; the session repository port exists so it can be swapped.
 - No auth — MVP is single-user local. Do not expose beyond localhost.

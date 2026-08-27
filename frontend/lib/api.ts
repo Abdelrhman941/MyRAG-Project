@@ -224,3 +224,19 @@ export async function sendMessageAction(sessionId: string, question: string) {
     };
   }
 }
+
+export async function getReadyStatusAction(): Promise<{ status: string; detail?: string }> {
+  const url = `${BACKEND_URL}/readyz`;
+  try {
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) {
+      if (response.status === 503) {
+        return await response.json();
+      }
+      return { status: 'error', detail: `HTTP error ${response.status}` };
+    }
+    return await response.json();
+  } catch (e: unknown) {
+    return { status: 'error', detail: (e as Error).message || 'Connection failed' };
+  }
+}

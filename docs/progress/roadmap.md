@@ -10,6 +10,15 @@ Parent: [../00-index.md](../00-index.md) · Rules: [../../AGENTS.md](../../AGENT
 
 ---
 
+## Stage 0 — Model Warm-up & Readiness ✅
+Spec: [../deliverable/plan/stage-0-warmup-readiness.md](../deliverable/plan/stage-0-warmup-readiness.md)
+- [x] Backend: Convert `main.py` to `lifespan` context manager
+- [x] Backend: `/healthz` and `/readyz` endpoints
+- [x] Frontend: Polling `/readyz` every 2s
+- [x] Frontend: Disabled composer, loading spinner, error state handling
+- [x] SDD updated
+- [x] Summary written: `stage-0-summary.md`
+
 ## Stage 00 — Foundation ✅
 - [x] FastAPI app factory + logging middleware + exception handlers
 - [x] Settings (pydantic-settings) + SQLite async + Alembic

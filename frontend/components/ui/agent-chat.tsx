@@ -101,6 +101,8 @@ export type AgentChatProps = {
     onRemoveFile?: (id: string) => void;
   };
   className?: string;
+  disabled?: boolean;
+  placeholder?: string;
 };
 
 const SendIcon = () => <ArrowUp className="w-5 h-5" strokeWidth={2.5} />;
@@ -480,6 +482,8 @@ export const AgentChat = memo(function AgentChat({
   emptyStatePosition = 'default',
   attachments,
   className,
+  disabled,
+  placeholder,
 }: AgentChatProps) {
   const [draft, setDraft] = useState('');
 
@@ -512,6 +516,8 @@ export const AgentChat = memo(function AgentChat({
       attachments={attachments}
       value={draft}
       onChange={setDraft}
+      disabled={disabled}
+      placeholder={placeholder}
       className={isCenteredEmpty ? 'px-0 pb-0' : undefined}
     />
   );
