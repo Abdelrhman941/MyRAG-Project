@@ -59,6 +59,19 @@ export async function getSessions(): Promise<Session[]> {
   }
 }
 
+export async function getRagPhaseAction(sessionId: string): Promise<string> {
+  try {
+    const data = await apiFetch<{ phase: string }>(
+      `/api/v1/chat/sessions/${sessionId}/rag-phase`,
+      { next: { revalidate: 0 }, cache: 'no-store' }
+    );
+    return data.phase;
+  } catch (e: unknown) {
+    if ((e as { status?: number })?.status === 404) return 'idle';
+    throw e;
+  }
+}
+
 export async function getMessages(sessionId: string): Promise<Message[] | null> {
   try {
     // Backend returns { messages: [...] } — unwrap the envelope

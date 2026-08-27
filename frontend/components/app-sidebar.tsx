@@ -18,8 +18,6 @@ import {
 import { useDocuments } from '@/hooks/use-documents';
 import { createSessionAction, deleteSessionAction } from '@/lib/api';
 import {
-  AlertCircle,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Files,
@@ -136,12 +134,16 @@ export function AppSidebar({
                       {documents.slice(0, 5).map((doc) => (
                         <SidebarMenuSubItem key={doc.id}>
                           <div className="flex items-center gap-2 px-2 py-1.5 w-full text-sm text-sidebar-foreground/70">
+                            {/* Status dot with explicit color semantics */}
                             {doc.status === 'processing' || doc.status === 'uploaded' ? (
-                              <Loader2 className="h-3 w-3 animate-spin text-yellow-500 shrink-0" />
+                              <span className="relative flex shrink-0 h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500" />
+                              </span>
                             ) : doc.status === 'failed' ? (
-                              <AlertCircle className="h-3 w-3 text-red-500 shrink-0" />
+                              <span className="shrink-0 h-1.5 w-1.5 rounded-full bg-red-500" />
                             ) : (
-                              <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                              <span className="shrink-0 h-1.5 w-1.5 rounded-full bg-emerald-500" />
                             )}
                             <span className="truncate flex-1" title={doc.original_file_name}>
                               {doc.original_file_name}

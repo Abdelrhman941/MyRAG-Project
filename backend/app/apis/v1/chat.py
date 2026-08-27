@@ -36,10 +36,24 @@ from ...schemas.chat import (
     ChatSessionResponse,
 )
 from ...services import DocumentService
-from ...services.chat_service import ChatAnswer
+from ...services.chat_service import ChatAnswer, get_rag_phase
 from .documents import run_ingestion_background
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+@router.get(
+    "/sessions/{session_id}/rag-phase",
+    summary="Poll current RAG pipeline phase for a session",
+    response_model=None,
+)
+async def get_session_rag_phase(session_id: UUID) -> dict[str, str]:
+    """Lightweight in-memory poll — no DB access, no auth.
+
+    Returns ``{"phase": "<phase>"}`` where phase is one of:
+    ``idle`` | ``retrieving`` | ``generating``
+    """
+    return {"phase": get_rag_phase(session_id)}
 
 
 @router.post(

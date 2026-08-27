@@ -1,9 +1,9 @@
 'use client';
 
 import { useDocuments } from '@/hooks/use-documents';
-import { sendMessageAction } from '@/lib/api';
-import { useRef, useState } from 'react';
-import { AgentChat, AgentMessage } from './ui/agent-chat';
+import { sendMessageAction, getRagPhaseAction } from '@/lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { AgentChat, AgentMessage, RagPhase } from './ui/agent-chat';
 
 export function MessageFeed({
   initialMessages,
@@ -15,9 +15,32 @@ export function MessageFeed({
   const [messages, setMessages] = useState<import('@/lib/types').Message[]>(initialMessages);
   const [isPending, setIsPending] = useState(false);
 
-  // We use useDocuments here just for the upload function, so we don't need initial documents here.
   const { uploadFiles, isUploading } = useDocuments(sessionId);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Poll the backend RAG phase while a response is in-flight.
+  // Stops automatically when isPending becomes false (response arrived).
+  const [polledPhase, setPolledPhase] = useState<RagPhase>('idle');
+  // Derive displayed phase: always 'idle' when not waiting for a response
+  const ragPhase: RagPhase = isPending ? polledPhase : 'idle';
+
+  useEffect(() => {
+    if (!isPending) return;
+
+    const poll = async () => {
+      try {
+        const phase = await getRagPhaseAction(sessionId);
+        setPolledPhase(phase as RagPhase);
+      } catch {
+        // Network blip — keep previous phase, will retry
+      }
+    };
+
+    // Poll immediately then every 300ms
+    poll();
+    const interval = setInterval(poll, 300);
+    return () => clearInterval(interval);
+  }, [isPending, sessionId]);
 
   // Convert internal messages to AgentMessage format
   const agentMessages: AgentMessage[] = messages.map((m, idx) => {
@@ -99,6 +122,7 @@ export function MessageFeed({
       <AgentChat
         messages={agentMessages}
         status={isPending ? 'streaming' : 'ready'}
+        ragPhase={ragPhase}
         onSend={handleSend}
         emptyStatePosition="center"
         attachments={{

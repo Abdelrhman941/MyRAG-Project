@@ -13,6 +13,28 @@ from ..retrieval.service import RetrievalService
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# In-process RAG phase tracker
+# ---------------------------------------------------------------------------
+# Maps session_id (str) → current phase label.
+# Written by ChatService.answer() at each pipeline transition so the frontend
+# can poll GET /sessions/{id}/rag-phase for accurate real-time status.
+# Safe for single-process uvicorn; cleared immediately after answer() returns.
+# ---------------------------------------------------------------------------
+_rag_phase: dict[str, str] = {}
+
+
+def set_rag_phase(session_id: UUID | str, phase: str) -> None:
+    _rag_phase[str(session_id)] = phase
+
+
+def get_rag_phase(session_id: UUID | str) -> str:
+    return _rag_phase.get(str(session_id), "idle")
+
+
+def clear_rag_phase(session_id: UUID | str) -> None:
+    _rag_phase.pop(str(session_id), None)
+
 
 class SourceCitation(BaseModel):
     document_id: str
@@ -56,30 +78,37 @@ class ChatService:
         # 2. Persist user message IMMEDIATELY (truthful history)
         await self.repository.add_message(session_id, "user", question)
 
-        # 3. Retrieve Chunks
-        chunks = await self.retrieval_service.retrieve(question, session_id)
+        try:
+            # 3. Retrieve Chunks  — phase: retrieving
+            set_rag_phase(session_id, "retrieving")
+            chunks = await self.retrieval_service.retrieve(question, session_id)
 
-        # 4. Load memory (which now includes the user's question)
-        history = await self.memory.load_short_term(session_id)
+            # 4. Load memory (which now includes the user's question)
+            history = await self.memory.load_short_term(session_id)
 
-        # We skip adding the last message since we explicitly pass `question`
-        # to PromptBuilder. Using slice of N-1 because we just added it.
-        if history and history[-1].role == "user":
-            history = history[:-1]
+            # We skip adding the last message since we explicitly pass `question`
+            # to PromptBuilder. Using slice of N-1 because we just added it.
+            if history and history[-1].role == "user":
+                history = history[:-1]
 
-        summary = session.get("summary")
+            summary = session.get("summary")
 
-        # 5. Build prompt
-        messages, used_sources = self.prompt_builder.build_chat_prompt(
-            summary=summary,
-            chunks=chunks,
-            history=history,
-            question=question,
-            memory_manager=self.memory,
-        )
+            # 5. Build prompt
+            messages, used_sources = self.prompt_builder.build_chat_prompt(
+                summary=summary,
+                chunks=chunks,
+                history=history,
+                question=question,
+                memory_manager=self.memory,
+            )
 
-        # 6. Call LLM
-        answer_text = await self.llm.generate(messages)
+            # 6. Call LLM  — phase: generating
+            set_rag_phase(session_id, "generating")
+            answer_text = await self.llm.generate(messages)
+
+        finally:
+            # Always clear so stale phase never leaks on error or normal exit
+            clear_rag_phase(session_id)
 
         # 7. Persist assistant message
         await self.repository.add_message(session_id, "assistant", answer_text)

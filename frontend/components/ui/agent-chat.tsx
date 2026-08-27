@@ -14,6 +14,9 @@ function cn(...inputs: ClassValue[]) {
 
 export type ChatStatus = 'ready' | 'streaming' | 'submitted' | 'idle';
 
+/** Mirrors the phase values returned by GET /api/v1/chat/sessions/{id}/rag-phase */
+export type RagPhase = 'idle' | 'retrieving' | 'generating';
+
 export type MessagePart =
   | { type: 'text'; text: string }
   | { type: 'error'; title?: string; message: string };
@@ -37,7 +40,6 @@ export type AttachedFile = {
   size?: number;
 };
 
-
 function ImageChip({ url, onRemove }: { url: string; onRemove?: () => void }) {
   return (
     <div className="relative group rounded-md overflow-hidden bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
@@ -56,7 +58,14 @@ function ImageChip({ url, onRemove }: { url: string; onRemove?: () => void }) {
   );
 }
 
-function FileChip({ filename, onRemove }: { filename: string; size?: number; onRemove?: () => void }) {
+function FileChip({
+  filename,
+  onRemove,
+}: {
+  filename: string;
+  size?: number;
+  onRemove?: () => void;
+}) {
   return (
     <div className="relative group flex items-center gap-2 px-2 py-1 rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-600 dark:text-neutral-300">
       <FileText size={14} className="text-neutral-500" />
@@ -79,6 +88,7 @@ export type AgentChatProps = {
   onSend?: (message: { role: 'user'; content: string }) => void;
   onStop?: () => void;
   status?: ChatStatus;
+  ragPhase?: RagPhase;
   error?: { message: string; title?: string };
   emptyStatePosition?: 'default' | 'center';
   attachments?: {
@@ -99,7 +109,9 @@ const PaperclipIcon = () => <Paperclip className="w-[18px] h-[18px]" />;
 const XIcon = ({ size = 12 }: { size?: number }) => (
   <X width={size} height={size} strokeWidth={2} />
 );
-const FileIcon = ({ className }: { className?: string }) => <FileText className={cn("w-4 h-4", className)} />;
+const FileIcon = ({ className }: { className?: string }) => (
+  <FileText className={cn('w-4 h-4', className)} />
+);
 
 function UserBubble({ text }: { text: string }) {
   return (
@@ -138,21 +150,15 @@ function ErrorBubble({
   );
 }
 
-function ThinkingBubble() {
-  const phrases = [
-    'Searching knowledge base...',
-    'Retrieving relevant chunks...',
-    'Thinking...',
-    'Drafting the answer...',
-  ];
-  const [phraseIndex, setPhraseIndex] = useState(0);
+/** Map backend phase strings to human-readable status text. */
+const PHASE_TEXT: Record<string, string> = {
+  idle: 'Thinking...',
+  retrieving: 'Searching knowledge base...',
+  generating: 'Generating response...',
+};
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPhraseIndex((i) => (i + 1) % phrases.length);
-    }, 1600);
-    return () => clearInterval(interval);
-  }, []);
+function ThinkingBubble({ ragPhase = 'idle' }: { ragPhase?: string }) {
+  const text = PHASE_TEXT[ragPhase] ?? PHASE_TEXT.idle;
 
   return (
     <div className="flex justify-start">
@@ -161,27 +167,32 @@ function ThinkingBubble() {
           <div className="absolute inset-0 rounded-full bg-neutral-400/50 dark:bg-neutral-500/50 animate-ping [animation-duration:2.5s]" />
           <div className="relative w-1 h-1 rounded-full bg-neutral-500 dark:bg-neutral-400" />
         </div>
-        <div className="relative w-[210px] h-[20px]">
-          {phrases.map((phrase, i) => (
-            <div
-              key={phrase}
-              className={cn(
-                'absolute inset-0 transition-opacity duration-150 font-medium',
-                'bg-gradient-to-r from-neutral-400 via-neutral-800 to-neutral-400 dark:from-neutral-500 dark:via-neutral-100 dark:to-neutral-500',
-                'bg-[length:200%_auto] text-transparent bg-clip-text animate-shimmerText',
-                i === phraseIndex ? 'opacity-100' : 'opacity-0'
-              )}
-            >
-              {phrase}
-            </div>
-          ))}
+        <div className="relative w-[230px] h-[20px]">
+          <div
+            key={text}
+            className={cn(
+              'absolute inset-0 transition-opacity duration-200 font-medium',
+              'bg-gradient-to-r from-neutral-400 via-neutral-800 to-neutral-400 dark:from-neutral-500 dark:via-neutral-100 dark:to-neutral-500',
+              'bg-[length:200%_auto] text-transparent bg-clip-text animate-shimmerText'
+            )}
+          >
+            {text}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function MessageList({ messages, status }: { messages: AgentMessage[]; status?: ChatStatus }) {
+function MessageList({
+  messages,
+  status,
+  ragPhase,
+}: {
+  messages: AgentMessage[];
+  status?: ChatStatus;
+  ragPhase?: string;
+}) {
   const isThinking = status === 'streaming' && messages[messages.length - 1]?.role === 'user';
 
   return (
@@ -205,7 +216,7 @@ function MessageList({ messages, status }: { messages: AgentMessage[]; status?: 
         ))}
         {isThinking && (
           <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <ThinkingBubble />
+            <ThinkingBubble ragPhase={ragPhase} />
           </div>
         )}
       </div>
@@ -464,6 +475,7 @@ export const AgentChat = memo(function AgentChat({
   onSend,
   onStop,
   status = 'ready',
+  ragPhase,
   error,
   emptyStatePosition = 'default',
   attachments,
@@ -517,7 +529,7 @@ export const AgentChat = memo(function AgentChat({
         </div>
       ) : (
         <>
-          <MessageList messages={messagesWithError} status={status} />
+          <MessageList messages={messagesWithError} status={status} ragPhase={ragPhase} />
           {inputBarNode}
         </>
       )}
