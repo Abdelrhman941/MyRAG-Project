@@ -88,24 +88,36 @@ class RetrievalError(AppError):
     message = "Search service is currently unavailable."
 
 
-__all__ = [
-    "AppError",
-    "DuplicateDocumentError",
-    "EmptyQueryError",
-    "FileTooLargeError",
-    "MissingFilenameError",
-    "ParsingError",
-    "RetrievalError",
-    "StorageError",
-    "TooManyFilesError",
-    "UnsupportedDocumentTypeError",
-]
-
-
 class NotFoundError(AppError):
     status_code = 404
     code = "not_found"
     message = "Resource not found."
 
 
-__all__.append("NotFoundError")
+class DocumentProcessingConflictError(AppError):
+    status_code = 409
+    code = "document_processing"
+    message = "Cannot delete a document while it is being processed."
+
+
+class VectorStoreDeletionError(AppError):
+    status_code = 502
+    code = "vector_deletion_failed"
+    message = "Failed to delete document vectors."
+
+
+__all__ = [
+    "AppError",
+    "DocumentProcessingConflictError",
+    "DuplicateDocumentError",
+    "EmptyQueryError",
+    "FileTooLargeError",
+    "MissingFilenameError",
+    "NotFoundError",
+    "ParsingError",
+    "RetrievalError",
+    "StorageError",
+    "TooManyFilesError",
+    "UnsupportedDocumentTypeError",
+    "VectorStoreDeletionError",
+]

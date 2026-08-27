@@ -67,11 +67,11 @@ Spec: [stage-06-generation-chat.md](stage-06-generation-chat.md)
 - [x] `POST /api/v1/chat/sessions/{id}/messages`
 - [x] Summary written: `stage-06-summary.md`
 
-## Stage 07 — Document Management ⬜
+## Stage 07 — Document Management ✅
 Spec: [stage-07-document-management.md](stage-07-document-management.md)
-- [ ] `GET /api/v1/documents` (list)
-- [ ] `DELETE /api/v1/documents/{id}` (row + file + Qdrant points)
-- [ ] Summary written: `stage-07-summary.md`
+- [x] `GET /api/v1/documents` (list)
+- [x] `DELETE /api/v1/documents/{id}` (row + file + Qdrant points)
+- [x] Summary written: `stage-07-summary.md`
 
 ## Stage 08 — Frontend ⬜
 Spec: [stage-08-frontend.md](stage-08-frontend.md)
@@ -91,4 +91,4 @@ Spec: [stage-09-hardening.md](stage-09-hardening.md)
 
 ---
 
-**Current stage:** 07 — Document Management
+**Current stage:** 08 — Frontend

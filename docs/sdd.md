@@ -101,8 +101,8 @@ Full detail: [diagrams/api-interactions.md](diagrams/api-interactions.md).
 | `GET /` | ✅ | App metadata |
 | `POST /api/v1/documents` | ✅ | Upload one document |
 | `POST /api/v1/documents/batch` | ✅ | Upload up to 10 files, rate-limited 10/hour/IP |
-| `GET /api/v1/documents` | ⏳ | List documents |
-| `DELETE /api/v1/documents/{id}` | ⏳ | Delete document + its vectors |
+| `GET /api/v1/documents` | ✅ | List documents |
+| `DELETE /api/v1/documents/{id}` | ✅ | Delete document + its vectors |
 | `POST /api/v1/chat/sessions` | ✅ | Create chat session |
 | `GET /api/v1/chat/sessions` | ✅ | List sessions |
 | `GET /api/v1/chat/sessions/{id}/messages` | ✅ | Session history |
@@ -149,6 +149,7 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - Local filesystem storage adapter
 - Background ingestion pipeline (parsing, chunking, batched BGE-M3 embeddings, Qdrant hybrid vectors upsert)
 - Chat sessions, short-term and summary memory, hybrid retrieval fusion, and context-budget generation via Groq API
+- Document Management endpoints (list and complete deletion across DB, File, and Vector Store)
 
 **Not yet implemented ⏳** — see [progress/roadmap.md](progress/roadmap.md).
 

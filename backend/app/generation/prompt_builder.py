@@ -4,9 +4,9 @@ from typing import Any
 import tiktoken
 
 from ..core.config import Settings
+from ..memory.manager import MemoryManager
 from ..models import RetrievalResult
 from ..models.chat import ChatMessage
-from ..memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 

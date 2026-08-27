@@ -10,7 +10,7 @@ _engine = None
 _session_maker = None
 
 
-def _get_session_maker() -> async_sessionmaker[AsyncSession]:
+def get_session_maker() -> async_sessionmaker[AsyncSession]:
     global _engine, _session_maker
     if _session_maker is None:
         settings = get_settings()
@@ -47,6 +47,6 @@ def _get_session_maker() -> async_sessionmaker[AsyncSession]:
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for getting async session."""
-    maker = _get_session_maker()
+    maker = get_session_maker()
     async with maker() as session:
         yield session

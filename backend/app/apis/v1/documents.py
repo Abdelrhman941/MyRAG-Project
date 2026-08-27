@@ -10,10 +10,11 @@ from ...dependencies import (
     SessionDep,
     SettingsDep,
     StorageDep,
+    VectorStoreDep,
     get_storage,
     get_vector_store,
 )
-from ...infrastructure.db.session import _get_session_maker
+from ...infrastructure.db import get_session_maker
 from ...models import Document
 from ...schemas import (
     BatchUploadError,
@@ -35,7 +36,7 @@ async def run_ingestion_background(document_id: UUID) -> None:
     settings = get_settings()
     storage = get_storage()
     vector_store = get_vector_store(settings)
-    maker = _get_session_maker()
+    maker = get_session_maker()
     async with maker() as db:
         service = IngestionService(db, storage, vector_store, settings)
         try:
@@ -127,3 +128,38 @@ async def upload_batch(
             results.append(BatchUploadResult(filename=filename, ok=False, error=error))
 
     return BatchUploadResponse(results=results)
+
+
+@router.get(
+    "",
+    response_model=list[DocumentResponse],
+    summary="List documents",
+)
+async def list_documents(
+    db: SessionDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[DocumentResponse]:
+    """List all documents, newest first."""
+    service = DocumentService(db, storage, settings)
+    docs = await service.list_documents(limit=limit, offset=offset)
+    return [DocumentResponse.model_validate(d) for d in docs]
+
+
+@router.delete(
+    "/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a document",
+)
+async def delete_document(
+    document_id: UUID,
+    db: SessionDep,
+    storage: StorageDep,
+    vector_store: VectorStoreDep,
+    settings: SettingsDep,
+) -> None:
+    """Delete a document entirely (vectors, file, and DB record)."""
+    service = DocumentService(db, storage, settings, vector_store)
+    await service.delete_document(document_id)

@@ -4,21 +4,24 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import aiofiles
 from fastapi import UploadFile
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import DocumentStatus, DocumentType, Settings
 from ..core.exceptions import (
+    DocumentProcessingConflictError,
     DuplicateDocumentError,
     FileTooLargeError,
     MissingFilenameError,
+    NotFoundError,
     UnsupportedDocumentTypeError,
 )
-from ..infrastructure import FileStoragePort
+from ..infrastructure import FileStoragePort, VectorStorePort
 from ..models import Document
 
 logger = logging.getLogger(__name__)
@@ -35,9 +38,16 @@ def _remove_temp(path: Path) -> None:
 class DocumentService:
     """Orchestrates document upload and persistence."""
 
-    def __init__(self, db: AsyncSession, storage: FileStoragePort, settings: Settings):
+    def __init__(
+        self,
+        db: AsyncSession,
+        storage: FileStoragePort,
+        settings: Settings,
+        vector_store: VectorStorePort | None = None,
+    ):
         self.db = db
         self.storage = storage
+        self.vector_store = vector_store
         self.settings = settings
         self._db_lock = asyncio.Lock()
 
@@ -154,3 +164,50 @@ class DocumentService:
             return_exceptions=True,
         )
         return results
+
+    async def list_documents(self, limit: int = 50, offset: int = 0) -> list[Document]:
+        """List documents ordered by newest first."""
+        stmt = (
+            select(Document)
+            .order_by(Document.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def delete_document(self, document_id: UUID) -> None:
+        """
+        Delete a document and all its associated data.
+        Order: Qdrant Vectors -> Filesystem -> DB.
+        """
+        if not self.vector_store:
+            raise RuntimeError("vector_store is required for deletion")
+
+        # 1. Fetch from DB
+        doc = await self.db.get(Document, document_id)
+        if not doc:
+            raise NotFoundError(message=f"Document {document_id} not found")
+
+        # 2. Check if processing
+        if doc.status == DocumentStatus.PROCESSING:
+            raise DocumentProcessingConflictError()
+
+        # 3. Delete from Vector Store (Qdrant)
+        try:
+            await self.vector_store.delete_by_document(document_id)
+        except Exception as e:
+            logger.exception("Failed to delete vectors for document %s", document_id)
+            from ..core.exceptions import VectorStoreDeletionError
+
+            raise VectorStoreDeletionError() from e
+
+        # 4. Delete from Filesystem
+        # If this fails, it naturally bubbles up as a 500 (StorageError).
+        filename = f"{doc.id}{doc.document_type.extension}"
+        await self.storage.delete(filename)
+
+        # 5. Delete from DB
+        async with self._db_lock:
+            await self.db.delete(doc)
+            await self.db.commit()
