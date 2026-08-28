@@ -1,5 +1,6 @@
+import json
+from collections.abc import AsyncGenerator
 from typing import Annotated, Any
-from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -10,20 +11,20 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
 
-from ...core import limiter
+from ...core import get_settings, limiter
 from ...core.exceptions import AppError, TooManyFilesError
 from ...dependencies import (
+    ArqPoolDep,
     ChatServiceDep,
-    SessionDep,
+    DocumentServiceDep,
     SessionRepositoryDep,
     SettingsDep,
-    StorageDep,
-    VectorStoreDep,
+    ValidSessionDep,
 )
-from ...models import ChatSession, Document
+from ...models import Document
 from ...schemas import (
     BatchUploadError,
     BatchUploadResponse,
@@ -35,25 +36,9 @@ from ...schemas.chat import (
     ChatSessionListResponse,
     ChatSessionResponse,
 )
-from ...services import DocumentService
-from ...services.chat_service import ChatAnswer, get_rag_phase
-from .documents import run_ingestion_background
+from ...services.chat_service import ChatAnswer
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-
-@router.get(
-    "/sessions/{session_id}/rag-phase",
-    summary="Poll current RAG pipeline phase for a session",
-    response_model=None,
-)
-async def get_session_rag_phase(session_id: UUID) -> dict[str, str]:
-    """Lightweight in-memory poll — no DB access, no auth.
-
-    Returns ``{"phase": "<phase>"}`` where phase is one of:
-    ``idle`` | ``retrieving`` | ``generating``
-    """
-    return {"phase": get_rag_phase(session_id)}
 
 
 @router.post(
@@ -72,38 +57,21 @@ async def list_sessions(repository: SessionRepositoryDep) -> Any:
 
 
 @router.get("/sessions/{session_id}/messages", response_model=ChatMessageListResponse)
-async def list_messages(session_id: UUID, repository: SessionRepositoryDep) -> Any:
-    # Verify session exists
-    session = await repository.get_session(session_id)
-    if not session:
-        from ...core.exceptions import NotFoundError
-
-        raise NotFoundError(message=f"Session {session_id} not found")
-
+async def list_messages(
+    session_id: ValidSessionDep, repository: SessionRepositoryDep
+) -> Any:
     messages = await repository.list_messages(session_id)
     return {"messages": messages}
 
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(
-    session_id: UUID,
+    session_id: ValidSessionDep,
     repository: SessionRepositoryDep,
-    db: SessionDep,
-    storage: StorageDep,
-    vector_store: VectorStoreDep,
-    settings: SettingsDep,
+    doc_service: DocumentServiceDep,
+    force: bool = False,
 ) -> Response:
-    from ...services import DocumentService
-
-    # Verify session exists
-    session = await repository.get_session(session_id)
-    if not session:
-        from ...core.exceptions import NotFoundError
-
-        raise NotFoundError(message=f"Session {session_id} not found")
-
-    doc_service = DocumentService(db, storage, settings, vector_store)
-    await doc_service.delete_session_data(session_id)
+    await doc_service.delete_session_data(session_id, force=force)
 
     await repository.delete_session(session_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -113,9 +81,35 @@ class ChatRequest(BaseModel):
     question: str
 
 
+@router.post("/sessions/{session_id}/messages/stream", response_class=StreamingResponse)
+async def ask_question_stream(
+    session_id: ValidSessionDep,
+    request: ChatRequest,
+    chat_service: ChatServiceDep,
+    background_tasks: BackgroundTasks,
+) -> StreamingResponse:
+    async def event_generator() -> AsyncGenerator[str, None]:
+        async for event in chat_service.answer_stream(
+            session_id, request.question, background_tasks
+        ):
+            if event["event"] == "ping":
+                yield ": ping\n\n"
+            else:
+                yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.post("/sessions/{session_id}/messages", response_model=ChatAnswer)
 async def ask_question(
-    session_id: UUID,
+    session_id: ValidSessionDep,
     request: ChatRequest,
     chat_service: ChatServiceDep,
     background_tasks: BackgroundTasks,
@@ -129,27 +123,17 @@ async def ask_question(
     status_code=status.HTTP_201_CREATED,
     summary="Upload a new document",
 )
-@limiter.limit("10/hour")
+@limiter.limit(lambda: get_settings().UPLOAD_RATE_LIMIT)
 async def upload_document(
-    session_id: UUID,
-    background_tasks: BackgroundTasks,
+    session_id: ValidSessionDep,
     request: Request,
     file: UploadFile,
-    db: SessionDep,
-    storage: StorageDep,
-    settings: SettingsDep,
+    doc_service: DocumentServiceDep,
+    arq_pool: ArqPoolDep,
 ) -> DocumentResponse:
     """Upload a single document to the RAG system."""
-    session_check = await db.execute(
-        select(ChatSession).where(ChatSession.id == session_id)
-    )
-    if not session_check.scalar_one_or_none():
-        from ...core.exceptions import NotFoundError
-
-        raise NotFoundError(message=f"Session {session_id} not found")
-    service = DocumentService(db, storage, settings)
-    document = await service.upload_document(file, session_id)
-    background_tasks.add_task(run_ingestion_background, document.id)
+    document = await doc_service.upload_document(file, session_id)
+    await arq_pool.enqueue_job("ingest_document", str(document.id))
     return DocumentResponse.model_validate(document)
 
 
@@ -159,15 +143,14 @@ async def upload_document(
     status_code=status.HTTP_201_CREATED,
     summary="Upload up to 10 documents in one request",
 )
-@limiter.limit("10/hour")
+@limiter.limit(lambda: get_settings().UPLOAD_RATE_LIMIT)
 async def upload_batch(
-    session_id: UUID,
-    background_tasks: BackgroundTasks,
+    session_id: ValidSessionDep,
     request: Request,
     files: Annotated[list[UploadFile], File(...)],
-    db: SessionDep,
-    storage: StorageDep,
+    doc_service: DocumentServiceDep,
     settings: SettingsDep,
+    arq_pool: ArqPoolDep,
 ) -> BatchUploadResponse:
     """Upload multiple documents (up to 10) in a single multipart request.
 
@@ -181,15 +164,7 @@ async def upload_batch(
             )
         )
 
-    session_check = await db.execute(
-        select(ChatSession).where(ChatSession.id == session_id)
-    )
-    if not session_check.scalar_one_or_none():
-        from ...core.exceptions import NotFoundError
-
-        raise NotFoundError(message=f"Session {session_id} not found")
-    service = DocumentService(db, storage, settings)
-    raw_results: list[Document | BaseException] = await service.upload_batch(
+    raw_results: list[Document | BaseException] = await doc_service.upload_batch(
         files, session_id
     )
 
@@ -197,7 +172,7 @@ async def upload_batch(
     for file, outcome in zip(files, raw_results, strict=True):
         filename = file.filename or ""
         if isinstance(outcome, Document):
-            background_tasks.add_task(run_ingestion_background, outcome.id)
+            await arq_pool.enqueue_job("ingest_document", str(outcome.id))
             results.append(
                 BatchUploadResult(
                     filename=filename,
@@ -229,21 +204,11 @@ async def upload_batch(
     summary="List documents",
 )
 async def list_documents(
-    session_id: UUID,
-    db: SessionDep,
-    storage: StorageDep,
-    settings: SettingsDep,
+    session_id: ValidSessionDep,
+    doc_service: DocumentServiceDep,
     limit: int = 50,
     offset: int = 0,
 ) -> list[DocumentResponse]:
     """List all documents, newest first."""
-    session_check = await db.execute(
-        select(ChatSession).where(ChatSession.id == session_id)
-    )
-    if not session_check.scalar_one_or_none():
-        from ...core.exceptions import NotFoundError
-
-        raise NotFoundError(message=f"Session {session_id} not found")
-    service = DocumentService(db, storage, settings)
-    docs = await service.list_documents(session_id, limit=limit, offset=offset)
+    docs = await doc_service.list_documents(session_id, limit=limit, offset=offset)
     return [DocumentResponse.model_validate(d) for d in docs]

@@ -7,6 +7,7 @@ from qdrant_client.http import models as rest
 
 from ...core.config import Settings
 from ...models import Chunk
+from ..ports import VectorSearchHit
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class QdrantVectorStore:
         self.client = AsyncQdrantClient(
             url=settings.QDRANT_URL, check_compatibility=False
         )
-        self.collection_name = "chunks"
+        self.collection_name = settings.QDRANT_COLLECTION
 
     async def ensure_collection(self) -> None:
         """Ensure the target collection exists with the required configuration."""
@@ -40,6 +41,18 @@ class QdrantVectorStore:
                     sparse_vectors_config={"sparse": rest.SparseVectorParams()},
                 )
                 logger.info("Created Qdrant collection '%s'", self.collection_name)
+
+                await self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="session_id",
+                    field_schema=rest.PayloadSchemaType.KEYWORD,
+                )
+                await self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="document_id",
+                    field_schema=rest.PayloadSchemaType.KEYWORD,
+                )
+                logger.info("Created payload indexes on '%s'", self.collection_name)
             except Exception as e:
                 # Handle race condition where another task creates it concurrently
                 if await self.client.collection_exists(self.collection_name):
@@ -74,6 +87,11 @@ class QdrantVectorStore:
                 "chunk_index": chunk.chunk_index,
                 "text": chunk.text,
             }
+            if chunk.page_number is not None:
+                payload["page_number"] = chunk.page_number
+            if chunk.section is not None:
+                payload["section"] = chunk.section
+
             payload.update(payload_metadata)
 
             points.append(
@@ -108,13 +126,12 @@ class QdrantVectorStore:
         query_sparse: dict[int, float] | None,
         session_id: UUID,
         limit: int = 5,
-    ) -> list[dict[str, Any]]:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
+    ) -> list[VectorSearchHit]:
 
-        session_filter = Filter(
+        session_filter = rest.Filter(
             must=[
-                FieldCondition(
-                    key="session_id", match=MatchValue(value=str(session_id))
+                rest.FieldCondition(
+                    key="session_id", match=rest.MatchValue(value=str(session_id))
                 )
             ]
         )
@@ -126,6 +143,7 @@ class QdrantVectorStore:
                     query=query_dense,
                     using="dense",
                     limit=limit * 2,
+                    filter=session_filter,
                 ),
                 rest.Prefetch(
                     query=rest.SparseVector(
@@ -134,6 +152,7 @@ class QdrantVectorStore:
                     ),
                     using="sparse",
                     limit=limit * 2,
+                    filter=session_filter,
                 ),
             ]
             response = await self.client.query_points(
@@ -155,11 +174,15 @@ class QdrantVectorStore:
                 query_filter=session_filter,
             )
 
-        results = []
+        results: list[VectorSearchHit] = []
         for point in response.points:
             if point.payload is not None:
-                res = dict(point.payload)
-                res["_score"] = point.score
-                results.append(res)
+                results.append(
+                    {
+                        "id": str(point.id),
+                        "score": point.score,
+                        "payload": point.payload,
+                    }
+                )
 
         return results

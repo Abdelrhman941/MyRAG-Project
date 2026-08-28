@@ -14,12 +14,12 @@ try {
 }
 
 // 10 files max per request
-const maxBodySize = `${maxFileSizeMB * 10 + 10}mb`;
+const maxBodySizeBytes = (maxFileSizeMB * 10 + 10) * 1024 * 1024;
 
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: maxBodySize,
+      bodySizeLimit: maxBodySizeBytes,
     },
   },
   env: {

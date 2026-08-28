@@ -1,9 +1,9 @@
+from .chat_service import ChatService
 from .document_service import DocumentService
 from .ingestion_service import IngestionService
-from ..retrieval import RetrievalService
 
 __all__ = [
+    "ChatService",
     "DocumentService",
     "IngestionService",
-    "RetrievalService",
 ]

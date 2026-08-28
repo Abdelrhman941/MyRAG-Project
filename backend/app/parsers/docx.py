@@ -4,6 +4,7 @@ from typing import BinaryIO
 import docx
 
 from ..models import ParsedSegment
+from .utils import normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +15,6 @@ def parse_docx(stream: BinaryIO) -> list[ParsedSegment]:
         doc = docx.Document(stream)
     except Exception as e:
         raise ValueError("Failed to read DOCX file") from e
-
-    from .utils import normalize_text
 
     segments: list[ParsedSegment] = []
 

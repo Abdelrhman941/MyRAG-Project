@@ -89,6 +89,8 @@ class PromptBuilder:
                         "document_id": doc_id,
                         "original_file_name": file_name,
                         "chunk_index": chunk_idx,
+                        "page_number": res.chunk.page_number,
+                        "section": res.chunk.section,
                     }
                 )
             else:
@@ -135,6 +137,38 @@ class PromptBuilder:
             prompt += f"{msg.role.capitalize()}: {msg.content}\n"
 
         prompt += "\nWrite the updated summary now."
+
+        return [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": prompt},
+        ]
+
+    def build_query_rewrite_prompt(
+        self,
+        summary: str | None,
+        recent_history: list[ChatMessage],
+        current_question: str,
+    ) -> list[dict[str, str]]:
+        """Prompt to rewrite the user's query for better retrieval."""
+        system_msg = (
+            "You are a search query rewriting assistant. Your task is to rewrite the "
+            "user's latest question into a standalone, highly effective search query "
+            "that can be used to retrieve relevant documents from a vector database.\n"
+            "Analyze the conversation summary and recent history to resolve any "
+            "pronouns or contextual references (e.g., 'it', 'that', 'the error').\n"
+            "Output ONLY the rewritten query text. Do not include any explanation."
+        )
+
+        prompt = ""
+        if summary:
+            prompt += f"Conversation Summary:\n{summary}\n\n"
+
+        if recent_history:
+            prompt += "Recent Messages:\n"
+            for msg in recent_history:
+                prompt += f"{msg.role.capitalize()}: {msg.content}\n"
+
+        prompt += f"\nUser's Current Question: {current_question}\n\nRewritten Query:"
 
         return [
             {"role": "system", "content": system_msg},

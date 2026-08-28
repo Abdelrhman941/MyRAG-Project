@@ -19,6 +19,19 @@ Spec: [../deliverable/plan/stage-0-warmup-readiness.md](../deliverable/plan/stag
 - [x] SDD updated
 - [x] Summary written: `stage-0-summary.md`
 
+## Stage 1 — Correctness & Performance ✅
+Spec: [../deliverable/plan/stage-1-correctness-perf.md](../deliverable/plan/stage-1-correctness-perf.md)
+- [x] S1.1 Qdrant hybrid prefetch filter bug fix
+- [x] S1.2 App-scoped singletons (Qdrant, httpx, storage)
+- [x] S1.3 Qdrant payload indexes
+- [x] S1.4 Remove DocumentService dead lock
+- [x] S1.5 count_messages port
+- [x] S1.6 Extract get_session_or_404 dependency
+- [x] S1.7 Threadpool for CPU-bound parse/chunk
+- [x] S1.8 CORS
+- [x] S1.9 Upload read chunk size
+- [x] Summary written: `stage-1-summary.md`
+
 ## Stage 00 — Foundation ✅
 - [x] FastAPI app factory + logging middleware + exception handlers
 - [x] Settings (pydantic-settings) + SQLite async + Alembic
@@ -102,11 +115,14 @@ Spec: [stage-08-frontend.md](stage-08-frontend.md)
 
 ## Stage 09 — Hardening (deferred items) ⬜
 Spec: [stage-09-hardening.md](stage-09-hardening.md)
+- [x] Stage 2: SSE Streaming End-to-End (`plan/stage-2-sse-streaming.md`)
+- [x] Stage 3: ARQ Background Ingestion (`plan/stage-3-arq-ingestion.md`)
+- [x] Stage 4: RAG Quality Improvements (`plan/stage-4-rag-quality.md`)
 - [ ] Automated test suite (pytest + httpx ASGITransport, isolated fixtures)
 - [ ] Reranker `bge-reranker-v2-m3` behind a Settings flag
-- [ ] Streaming responses (SSE)
+- [x] Streaming responses (SSE)
 - [ ] Semantic long-term memory (Qdrant `chat_memory` collection)
-- [x] Summary written: `stage-09-summary.md`
+- [ ] Summary written: `stage-09-summary.md`
 
 ---
 

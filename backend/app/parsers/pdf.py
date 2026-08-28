@@ -5,6 +5,7 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from ..models import ParsedSegment
+from .utils import normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,6 @@ def parse_pdf(stream: BinaryIO) -> list[ParsedSegment]:
     segments: list[ParsedSegment] = []
 
     # Lazy import to avoid circular imports if core.py imports this
-    from .utils import normalize_text
 
     for i, page in enumerate(reader.pages):
         try:

@@ -23,6 +23,8 @@ dependencies = [
   "slowapi>=0.1.10",
   "sqlalchemy[asyncio]>=2.0.52",
   "tiktoken>=0.14.0",
+  "arq",
+  "redis",
 ]
 
 [tool.ruff]

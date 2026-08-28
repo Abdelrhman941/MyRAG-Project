@@ -111,10 +111,14 @@ export function DocumentManager({
                           : ''
                       }
                     >
-                      {doc.status === 'processing' && (
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      {doc.status === 'processing' || doc.status === 'uploaded' ? (
+                        <>
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          Indexing...
+                        </>
+                      ) : (
+                        doc.status
                       )}
-                      {doc.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">

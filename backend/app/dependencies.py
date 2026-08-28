@@ -1,20 +1,21 @@
-from typing import Annotated
+from typing import Annotated, Any, cast
+from uuid import UUID
 
-from fastapi import Depends
+from arq.connections import ArqRedis
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .core import Settings, get_settings
+from .core.exceptions import NotFoundError
 from .infrastructure import (
-    DocumentStorage,
     FileStoragePort,
     LLMProviderPort,
-    QdrantVectorStore,
     SessionRepositoryPort,
     VectorStorePort,
 )
 from .infrastructure import get_db as _get_db
 from .retrieval.service import RetrievalService
-from .services.chat_service import ChatService
+from .services import ChatService, DocumentService
 
 # -------- App-Settings --------
 type SettingsDep = Annotated[
@@ -30,8 +31,8 @@ type SessionDep = Annotated[
 
 
 # -------- Storage --------
-def get_storage() -> FileStoragePort:
-    return DocumentStorage()
+def get_storage(request: Request) -> FileStoragePort:
+    return cast(FileStoragePort, request.app.state.document_storage)
 
 
 type StorageDep = Annotated[
@@ -41,8 +42,8 @@ type StorageDep = Annotated[
 
 
 # -------- Vector Store --------
-def get_vector_store(settings: SettingsDep) -> VectorStorePort:
-    return QdrantVectorStore(settings)
+def get_vector_store(request: Request) -> VectorStorePort:
+    return cast(VectorStorePort, request.app.state.vector_store)
 
 
 type VectorStoreDep = Annotated[
@@ -64,11 +65,28 @@ type SessionRepositoryDep = Annotated[
 ]
 
 
+async def get_session_or_404(
+    session_id: UUID, repository: SessionRepositoryDep
+) -> UUID:
+    """Verify session exists and return its ID, or raise 404."""
+
+    session = await repository.get_session(session_id)
+    if not session:
+        raise NotFoundError(message=f"Session {session_id} not found")
+    return session_id
+
+
+type ValidSessionDep = Annotated[
+    UUID,
+    Depends(get_session_or_404),
+]
+
+
 # -------- LLM Provider --------
-def get_llm_provider(settings: SettingsDep) -> LLMProviderPort:
+def get_llm_provider(request: Request, settings: SettingsDep) -> LLMProviderPort:
     from .infrastructure import OpenAICompatibleLLM
 
-    return OpenAICompatibleLLM(settings)
+    return OpenAICompatibleLLM(settings, cast(Any, request.app.state.http_client))
 
 
 type LLMProviderDep = Annotated[
@@ -90,6 +108,34 @@ type RetrievalServiceDep = Annotated[
 ]
 
 
+# -------- ARQ Background Jobs --------
+def get_arq_pool(request: Request) -> ArqRedis:
+    return cast(ArqRedis, request.app.state.arq_pool)
+
+
+type ArqPoolDep = Annotated[
+    ArqRedis,
+    Depends(get_arq_pool),
+]
+
+
+# -------- Document Service --------
+def get_document_service(
+    session: SessionDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+    vector_store: VectorStoreDep,
+) -> DocumentService:
+
+    return DocumentService(session, storage, settings, vector_store)
+
+
+type DocumentServiceDep = Annotated[
+    DocumentService,
+    Depends(get_document_service),
+]
+
+
 # -------- Chat Service --------
 def get_chat_service(
     repository: SessionRepositoryDep,
@@ -104,4 +150,19 @@ def get_chat_service(
 type ChatServiceDep = Annotated[
     ChatService,
     Depends(get_chat_service),
+]
+
+
+__all__ = [
+    "ArqPoolDep",
+    "ChatServiceDep",
+    "DocumentServiceDep",
+    "LLMProviderDep",
+    "RetrievalServiceDep",
+    "SessionDep",
+    "SessionRepositoryDep",
+    "SettingsDep",
+    "StorageDep",
+    "ValidSessionDep",
+    "VectorStoreDep",
 ]

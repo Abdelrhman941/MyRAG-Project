@@ -71,7 +71,7 @@ export function useDocuments(sessionId: string | null, initialDocuments: Documen
       window.dispatchEvent(
         new CustomEvent('documents-sync', { detail: { sessionId, documents: fresh } })
       );
-    }, 2000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [documents, sessionId]);

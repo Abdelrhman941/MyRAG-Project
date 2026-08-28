@@ -9,36 +9,42 @@ from ..models import Chunk, ParsedSegment
 logger = logging.getLogger(__name__)
 
 
+_splitter = None
+
+
+def _get_splitter() -> RecursiveCharacterTextSplitter:
+    global _splitter
+    if _splitter is None:
+        settings = get_settings()
+        _splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=settings.CHUNK_SIZE_TOKENS,
+            chunk_overlap=settings.CHUNK_OVERLAP_TOKENS,
+        )
+    return _splitter
+
+
 def chunk(segments: list[ParsedSegment], document_id: UUID) -> list[Chunk]:
     """Convert parsed segments into embedding-ready chunks."""
     if not segments:
         return []
 
-    # Combine segments into a single document string, keeping track of order.
-    # RecursiveCharacterTextSplitter operates on a single text string.
-    # For now, we will join the segments with a space or double newline.
-    # Since whitespace collapse already happened, joining with a newline is good.
-    full_text = "\n\n".join(seg.text for seg in segments)
+    splitter = _get_splitter()
 
-    # Initialize the token-aware text splitter
-    settings = get_settings()
-    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=settings.CHUNK_SIZE_TOKENS,
-        chunk_overlap=settings.CHUNK_OVERLAP_TOKENS,
-    )
-
-    # Perform the split
-    raw_chunks = splitter.split_text(full_text)
-
-    # Convert to Chunk objects
     chunks: list[Chunk] = []
-    for i, text in enumerate(raw_chunks):
-        chunks.append(
-            Chunk(
-                text=text,
-                document_id=document_id,
-                chunk_index=i,
+    chunk_idx = 0
+
+    for seg in segments:
+        raw_chunks = splitter.split_text(seg.text)
+        for text in raw_chunks:
+            chunks.append(
+                Chunk(
+                    text=text,
+                    document_id=document_id,
+                    chunk_index=chunk_idx,
+                    page_number=seg.page_number,
+                    section=seg.section,
+                )
             )
-        )
+            chunk_idx += 1
 
     return chunks

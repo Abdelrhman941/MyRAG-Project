@@ -106,6 +106,30 @@ class VectorStoreDeletionError(AppError):
     message = "Failed to delete document vectors."
 
 
+class TransientIngestionError(AppError):
+    def __init__(
+        self,
+        message: str = "Transient error during ingestion",
+        reason: str = "internal_error",
+    ):
+        self.reason = reason
+        super().__init__(
+            message=message, code="transient_ingestion_error", status_code=500
+        )
+
+
+class PermanentIngestionError(AppError):
+    def __init__(
+        self,
+        message: str = "Permanent error during ingestion",
+        reason: str = "internal_error",
+    ):
+        self.reason = reason
+        super().__init__(
+            message=message, code="permanent_ingestion_error", status_code=400
+        )
+
+
 __all__ = [
     "AppError",
     "DocumentProcessingConflictError",

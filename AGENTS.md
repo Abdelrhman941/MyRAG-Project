@@ -49,21 +49,21 @@ question answering with chat sessions and memory.
 
 ## 3. Tech Stack (fixed — do not substitute without a stage instruction)
 
-| Concern | Use | Do NOT use |
-|---|---|---|
-| Backend framework | FastAPI (current official patterns) | Flask, Django |
-| ORM / migrations | SQLAlchemy 2.x async + Alembic | raw SQL, `create_all` in prod |
-| Metadata & chat sessions DB | SQLite (`sqlite+aiosqlite`) | PostgreSQL (until an explicit stage) |
-| Parsing | `pypdf` (PDF), plain read (TXT), `markdown-it-py` (MD), `python-docx` (DOCX) | heavyweight ETL frameworks |
-| Chunking | `langchain-text-splitters` (`RecursiveCharacterTextSplitter`, token-aware) — **standalone package only** | full LangChain framework |
-| Embeddings | `sentence-transformers`, model `BAAI/bge-m3` (CPU, dense + sparse, ~2–3 GB RAM, loaded once as a singleton) | any model that doesn't fit ~4 GB RAM |
-| Vector store | **Qdrant** via `qdrant-client`; hybrid (dense+sparse) fusion through Qdrant's native **Query API** | ChromaDB, FAISS, Pinecone, hand-rolled fusion in Python |
-| Reranking | `BAAI/bge-reranker-v2-m3` (CPU) — **deferred**, only when a stage introduces it | — |
-| LLM generation | External OpenAI-compatible API (provider chosen in the generation stage) behind `LLMProviderPort` | any local inference |
-| Rate limiting | `slowapi` (IP-based) + request-level validation | custom middleware reinventing it |
-| Agentic behavior | **Deferred**: LangGraph only, only if a stage explicitly requires multi-step reasoning | full LangChain agents |
-| Frontend | Next.js (App Router) + **pnpm** + TailwindCSS + shadcn/ui; base template from 21st.dev (`ai-chat`), stripped to what we need | create-react-app, Vue |
-| Package manager (backend) | `uv` | pip + requirements.txt |
+| Concern                     | Use                                                                                                                          | Do NOT use                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Backend framework           | FastAPI (current official patterns)                                                                                          | Flask, Django                                           |
+| ORM / migrations            | SQLAlchemy 2.x async + Alembic                                                                                               | raw SQL, `create_all` in prod                           |
+| Metadata & chat sessions DB | SQLite (`sqlite+aiosqlite`)                                                                                                  | PostgreSQL (until an explicit stage)                    |
+| Parsing                     | `pypdf` (PDF), plain read (TXT), `markdown-it-py` (MD), `python-docx` (DOCX)                                                 | heavyweight ETL frameworks                              |
+| Chunking                    | `langchain-text-splitters` (`RecursiveCharacterTextSplitter`, token-aware) — **standalone package only**                     | full LangChain framework                                |
+| Embeddings                  | `sentence-transformers`, model `BAAI/bge-m3` (CPU, dense + sparse, ~2–3 GB RAM, loaded once as a singleton)                  | any model that doesn't fit ~4 GB RAM                    |
+| Vector store                | **Qdrant** via `qdrant-client`; hybrid (dense+sparse) fusion through Qdrant's native **Query API**                           | ChromaDB, FAISS, Pinecone, hand-rolled fusion in Python |
+| Reranking                   | `BAAI/bge-reranker-v2-m3` (CPU) — **deferred**, only when a stage introduces it                                              | —                                                       |
+| LLM generation              | External OpenAI-compatible API (provider chosen in the generation stage) behind `LLMProviderPort`                            | any local inference                                     |
+| Rate limiting               | `slowapi` (IP-based) + request-level validation                                                                              | custom middleware reinventing it                        |
+| Agentic behavior            | **Deferred**: LangGraph only, only if a stage explicitly requires multi-step reasoning                                       | full LangChain agents                                   |
+| Frontend                    | Next.js (App Router) + **pnpm** + TailwindCSS + shadcn/ui; base template from 21st.dev (`ai-chat`), stripped to what we need | create-react-app, Vue                                   |
+| Package manager (backend)   | `uv`                                                                                                                         | pip + requirements.txt                                  |
 
 **Note on "strong tools per stage":** we use the best *focused* library for each
 pipeline stage (e.g. `langchain-text-splitters` for chunking, `sentence-transformers`
@@ -107,12 +107,12 @@ See [docs/diagrams/architecture.md](docs/diagrams/architecture.md) for the full 
 Every external system is accessed through a **Port** (a `typing.Protocol`) with at
 least one **Adapter**. Services depend on ports, never on concrete adapters.
 
-| Port | Current adapter | Swap target (future) |
-|---|---|---|
-| `FileStoragePort` | `LocalDocumentStorage` (filesystem) | S3 / MinIO |
-| `VectorStorePort` | `QdrantVectorStore` | another vector DB |
-| `LLMProviderPort` | `OpenAICompatibleLLM` (httpx) | any provider |
-| `SessionRepositoryPort` | `SqliteSessionRepository` | PostgreSQL repository |
+| Port                    | Current adapter                     | Swap target (future)  |
+| ----------------------- | ----------------------------------- | --------------------- |
+| `FileStoragePort`       | `LocalDocumentStorage` (filesystem) | S3 / MinIO            |
+| `VectorStorePort`       | `QdrantVectorStore`                 | another vector DB     |
+| `LLMProviderPort`       | `OpenAICompatibleLLM` (httpx)       | any provider          |
+| `SessionRepositoryPort` | `SqliteSessionRepository`           | PostgreSQL repository |
 
 - Ports live in `app/infrastructure/ports.py`.
 - Adapters live in `app/infrastructure/<system>/`.

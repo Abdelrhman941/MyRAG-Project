@@ -59,12 +59,24 @@ class Settings(BaseSettings):
 
     # ------------ Embeddings & Vector Store ------------
     QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_COLLECTION: str = "chunks"
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_BATCH_SIZE: Annotated[int, Field(gt=0)] = 16
+
+    # ------------ ARQ / Background Jobs ------------
+    REDIS_URL: str = "redis://localhost:6379"
+    INGESTION_WORKER_MAX_JOBS: Annotated[int, Field(gt=0)] = 2
+    INGESTION_JOB_TIMEOUT_S: Annotated[int, Field(gt=0)] = 1800
+    INGESTION_MAX_TRIES: Annotated[int, Field(gt=0)] = 3
+
+    # ------------ API ------------
+    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
     # ------------ Retrieval ------------
     RETRIEVAL_TOP_K: Annotated[int, Field(gt=0)] = 8
     RETRIEVAL_HYBRID: bool = True
+    RETRIEVAL_MIN_SCORE: float = 0.0
+    QUERY_REWRITE_ENABLED: bool = False
 
     # ------------ Memory ------------
     MEMORY_SHORT_TERM_N: int = 10
@@ -72,7 +84,7 @@ class Settings(BaseSettings):
 
     # ------------ LLM Generation ------------
     LLM_BASE_URL: str = "https://api.groq.com/openai/v1"
-    LLM_API_KEY: str = "sk-dummy"
+    LLM_API_KEY: str
     LLM_MODEL: str = "llama-3.3-70b-versatile"
     LLM_CONTEXT_TOKEN_BUDGET: int = 6000
     LLM_TIMEOUT_S: int = 60

@@ -27,6 +27,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
@@ -45,17 +46,22 @@ export function AppSidebar({
     });
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string, force: boolean = false) => {
     setDeletingId(id);
     startTransition(() => {
       const currentMatch = pathname.match(/\/chat\/([^\/]+)/);
       const activeId = currentMatch ? currentMatch[1] : undefined;
 
-      deleteSessionAction(id, activeId, initialSessions).then((res) => {
+      deleteSessionAction(id, activeId, initialSessions, force).then((res) => {
         setDeletingId(null);
         if (res && !res.success) {
           if (res.error?.code === 'document_processing') {
-            toast.error('Cannot delete session while documents are processing.');
+            toast.error('Cannot delete session while documents are processing.', {
+              action: {
+                label: 'Force Delete',
+                onClick: () => handleDelete(id, true)
+              }
+            });
           } else {
             toast.error(res.error?.message || 'Failed to delete session.');
           }
@@ -96,7 +102,7 @@ export function AppSidebar({
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<a href={`/chat/${activeSessionId}`} />}
+                    render={<Link href={`/chat/${activeSessionId}`} />}
                     isActive={pathname === `/chat/${activeSessionId}`}
                   >
                     <MessageSquare className="h-4 w-4" />
@@ -106,7 +112,7 @@ export function AppSidebar({
                 <SidebarMenuItem>
                   <div className="flex items-center w-full">
                     <SidebarMenuButton
-                      render={<a href={`/chat/${activeSessionId}/documents`} />}
+                      render={<Link href={`/chat/${activeSessionId}/documents`} />}
                       isActive={pathname === `/chat/${activeSessionId}/documents`}
                       className="flex-1"
                     >
@@ -154,7 +160,7 @@ export function AppSidebar({
                       {documents.length > 5 && (
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
-                            render={<a href={`/chat/${activeSessionId}/documents`} />}
+                            render={<Link href={`/chat/${activeSessionId}/documents`} />}
                             className="text-muted-foreground italic"
                           >
                             <span>+{documents.length - 5} more</span>
@@ -179,7 +185,7 @@ export function AppSidebar({
                   className="group flex items-center justify-between"
                 >
                   <SidebarMenuButton
-                    render={<a href={`/chat/${session.id}`} className="truncate block w-full" />}
+                    render={<Link href={`/chat/${session.id}`} className="truncate block w-full" />}
                     isActive={activeSessionId === session.id}
                     className="flex-1 truncate"
                   >

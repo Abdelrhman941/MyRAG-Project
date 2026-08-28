@@ -1,68 +1,61 @@
-# Stage 02 Summary — Parsing + Chunking
+# Stage 02 Summary — SSE Streaming End-to-End
 
-Date: 2026-08-26
+Date: 2024-11-20
 
 ## What was built
-- Created `ParsedSegment` and `Chunk` domain models using standard Python dataclasses with `slots=True` to minimize overhead.
-- Implemented `ParsingError` (422) in `app/core/exceptions.py`.
-- Added chunk size configuration `CHUNK_SIZE_TOKENS=512` and `CHUNK_OVERLAP_TOKENS=64` to `app/core/config.py`.
-- Created format-specific parsers in `app/parsers/` (`pdf`, `txt`, `md`, `docx`) that read bytes directly, with a unified `parse(content, doc_type, document_id)` entrypoint in `core.py`.
-- Implemented an internal utility module `app/parsers/utils.py` for shared decoding and text normalization, eliminating cyclic dependencies between `core.py` and format parsers.
-- Markdown parsing explicitly decodes, parses semantically (preserving structure like headings/lists via `MarkdownIt`), and then normalizes text without destroying structural line breaks.
-- Implemented text chunking in `app/chunking/core.py` using `RecursiveCharacterTextSplitter.from_tiktoken_encoder`.
+- **Backend:**
+  - Added `generate_stream` to `LLMProviderPort` returning an `AsyncIterator[str]`.
+  - Implemented `generate_stream` in `OpenAICompatibleLLM` using `httpx.AsyncClient.stream`, manually parsing `data:` chunks and catching rate limits/errors before streaming begins.
+  - Refactored `ChatService` into an `answer_stream` generator yielding Server-Sent Events (SSE) structured dicts (`sources`, `token`, `done`, `error`).
+  - Added `POST /api/v1/chat/sessions/{session_id}/messages/stream` using FastAPI's `StreamingResponse`.
+  - Added tests for `test_streaming.py` that verify SSE event emission, event order, and mid-stream error handling (mocking dependencies to work around FastAPI `StreamingResponse` tear-down quirks in tests).
+- **Frontend:**
+  - Removed old polling logic (`getRagPhaseAction` polling is kept for typing but actual chat is streamed).
+  - Implemented manual fetch streaming in `message-feed.tsx` using `response.body.getReader()`.
+  - Processed raw SSE text into `sources`, `token`, `done`, and `error` updates by appending directly to Next.js state.
+- **Documentation:**
+  - Updated `docs/sdd.md` to reflect the removal of the old `POST /messages` in favor of `/messages/stream`.
 
 ## Decisions made
-- We decided to use standard Python `@dataclass(slots=True)` instead of `Pydantic` for `Chunk` and `ParsedSegment`. These structures act purely as intermediate, non-HTTP payload payloads during ingestion, so minimizing memory footprint and overhead for thousands of items is better than Pydantic's full validation.
-- Extracted shared decoding and normalization logic into `app/parsers/utils.py` to prevent cyclic module coupling back to `core.py` and clarify internal parser dependency flow.
-- We opted for the `DocumentStorage` returning `bytes` (as originally implemented in Stage 01 via `aiofiles`), so `io.BytesIO` was injected cleanly into format-specific libraries (`pypdf`, `python-docx`) without re-fetching from disk.
-- Included `document_id` inside the `ParsingError` payload details for clearer tracing during batch responses downstream.
+- We opted to mock the `SessionRepositoryPort` and `VectorStorePort` in `tests/test_streaming.py` because `ASGITransport` + `StreamingResponse` prematurely closes dependency context managers before the body is consumed (a known quirk with `httpx` and ASGI servers in test mode).
+- SSE parsing in the Next.js client is done completely manually with `TextDecoder` and string manipulation to avoid introducing external SSE dependencies, maintaining a lean dependency graph.
 
 ## Deviations from spec
-- The spec mentioned `parse(path, doc_type)` but also mandated reading "only through `FileStoragePort`". Since the existing `FileStoragePort.read()` yields bytes rather than an absolute path (avoiding direct filesystem leaks), we updated the function signature to take `content: bytes` and `document_id` instead.
+- The heartbeat `: ping\n\n` is technically challenging to yield exactly every 15s when `self._prepare` executes synchronously on the event loop (as a blocking async call). While we added parsing support in the frontend, the backend currently yields events as they happen without a background heartbeat task to avoid threading complexities with the SQLite session pool.
 
 ## Verification evidence
+- Test output for backend streaming behavior:
 ```
-uv run --with ruff ruff check .
-All checks passed!
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /mnt/d/A/4-Projects/RAG/project_1/backend
+configfile: pyproject.toml
+plugins: anyio-4.14.2, langsmith-0.11.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collecting 2 items                                                             collected 2 items
 
-uv run --with ruff ruff format --check .
-All checks passed!
+tests/test_streaming.py ..
 
---- Testing MD Structure ---
-Markdown Extracted Text:
-[Preserved structure with blank lines between headings, paragraphs, and lists]
-
---- Testing >512 Token Chunking ---
-Generated 27 chunks.
-Chunk 0 tokens: 512
-...
-Chunk 25 tokens: 512
-Chunk 26 tokens: 352
-Chunk verification passed!
-
---- Testing Corrupted PDF ---
-invalid pdf header: b'This '
-EOF marker not found
-Parsing failed for document ...: Failed to read PDF file
-Successfully caught ParsingError: Failed to parse the document.
-
---- Testing Scanned/Empty PDF ---
-Scanned PDF generated 0 chunks.
-Scanned PDF verification passed!
+============================== 2 passed in 1.40s ===============================
+```
+- Next.js build:
+```
+ ✓ Compiled successfully
+ ✓ Linting and checking validity of types ...
+ ✓ Type checking passed.
 ```
 
 ## Out-of-scope items flagged
-- The `stage-02` components are currently stand-alone and purely operational. We did not write BackgroundTasks or attempt to link them to endpoints. Stage 03 will orchestrate these steps natively.
-- `DocumentService` currently relies on concrete `DocumentStorage` rather than a dedicated `Port`. This architectural debt is recognized but deliberately deferred to avoid expanding the scope of Stage 02's corrective pass.
+- None.
 
 ## Follow-ups for later stages
-- Ensure the Stage 03 pipeline fetches `content = await storage.read()` efficiently, possibly considering memory limits if a single worker ingests massive PDFs. `pypdf` supports `BytesIO` natively without leaks, but holding massive buffers in memory limits maximum concurrency.
+- Revisit FastAPI background task / StreamingResponse behavior if we need actual 15-second heartbeat intervals while Qdrant queries are active.
 
 ## Files touched
-- `pyproject.toml` — added parsing/chunking libraries.
-- `app/models/ingestion.py` — created `ParsedSegment` and `Chunk`.
-- `app/models/__init__.py` — exported ingestion objects.
-- `app/core/exceptions.py` — added `ParsingError`.
-- `app/core/config.py` — added `CHUNK_SIZE_TOKENS` and `CHUNK_OVERLAP_TOKENS`.
-- `app/parsers/__init__.py`, `core.py`, `utils.py`, `pdf.py`, `txt.py`, `md.py`, `docx.py` — implemented parsers pipeline and decoupled utils.
-- `app/chunking/__init__.py`, `core.py` — implemented chunker pipeline.
+- `backend/app/infrastructure/ports.py` — added `generate_stream` to LLM port.
+- `backend/app/infrastructure/llm_provider/openai_compatible.py` — implemented HTTP streaming for LLM API.
+- `backend/app/services/chat_service.py` — added `answer_stream` as primary flow instead of `_rag_phase`.
+- `backend/app/apis/v1/chat.py` — added SSE endpoint.
+- `backend/tests/test_streaming.py` — added test suite for endpoint.
+- `frontend/components/message-feed.tsx` — updated React state and fetch logic.
+- `docs/sdd.md` — updated endpoints.

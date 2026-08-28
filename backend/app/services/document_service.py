@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 import aiofiles
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ from ..core.exceptions import (
     MissingFilenameError,
     NotFoundError,
     UnsupportedDocumentTypeError,
+    VectorStoreDeletionError,
 )
 from ..infrastructure import FileStoragePort, VectorStorePort
 from ..models import Document
@@ -49,7 +50,6 @@ class DocumentService:
         self.storage = storage
         self.vector_store = vector_store
         self.settings = settings
-        self._db_lock = asyncio.Lock()
 
     async def _upload_single(self, file: UploadFile, session_id: UUID) -> Document:
         """Core per-file upload: validate → stream → hash → dedup → persist → move.
@@ -85,7 +85,7 @@ class DocumentService:
 
         try:
             async with aiofiles.open(tmp_path, "wb") as f:
-                while chunk := await file.read(8192):
+                while chunk := await file.read(262144):
                     total_size += len(chunk)
                     if total_size > self.settings.max_file_size_bytes:
                         max_mb = self.settings.MAX_FILE_SIZE_MB
@@ -111,20 +111,21 @@ class DocumentService:
             session_id=session_id,
         )
 
-        async with self._db_lock:
-            try:
-                self.db.add(document)
-                await self.db.commit()
-                await self.db.refresh(document)
-                self.db.expunge(document)
-            except IntegrityError as e:
-                await self.db.rollback()
-                _remove_temp(tmp_path)
-                raise DuplicateDocumentError() from e
-            except Exception:
-                await self.db.rollback()
-                _remove_temp(tmp_path)
-                raise
+        # The UNIQUE constraint on content_hash (and session_id) + IntegrityError
+        # handling is the real guard against duplicate documents.
+        try:
+            self.db.add(document)
+            await self.db.commit()
+            await self.db.refresh(document)
+            self.db.expunge(document)
+        except IntegrityError as e:
+            await self.db.rollback()
+            _remove_temp(tmp_path)
+            raise DuplicateDocumentError() from e
+        except Exception:
+            await self.db.rollback()
+            _remove_temp(tmp_path)
+            raise
 
         # 4. Move temp file to final storage.
         #    If this fails, delete the DB record so it does not become orphaned.
@@ -133,11 +134,9 @@ class DocumentService:
             await self.storage.move_from(tmp_path, final_filename)
         except Exception:
             logger.exception("File move failed after DB commit; rolling back DB record")
-            async with self._db_lock:
-                from sqlalchemy import delete
 
-                await self.db.execute(delete(Document).where(Document.id == doc_id))
-                await self.db.commit()
+            await self.db.execute(delete(Document).where(Document.id == doc_id))
+            await self.db.commit()
             raise
 
         return document
@@ -202,7 +201,6 @@ class DocumentService:
             await self.vector_store.delete_by_document(document_id)
         except Exception as e:
             logger.exception("Failed to delete vectors for document %s", document_id)
-            from ..core.exceptions import VectorStoreDeletionError
 
             raise VectorStoreDeletionError() from e
 
@@ -212,20 +210,20 @@ class DocumentService:
         await self.storage.delete(filename)
 
         # 5. Delete from DB
-        async with self._db_lock:
-            await self.db.delete(doc)
-            await self.db.commit()
+        await self.db.delete(doc)
+        await self.db.commit()
 
-    async def delete_session_data(self, session_id: UUID) -> None:
+    async def delete_session_data(self, session_id: UUID, force: bool = False) -> None:
         if not self.vector_store:
             raise RuntimeError("vector_store is required for deletion")
 
         docs = await self.list_documents(session_id, limit=10000)
 
         # 1. Preflight check for PROCESSING status
-        for doc in docs:
-            if doc.status == DocumentStatus.PROCESSING:
-                raise DocumentProcessingConflictError()
+        if not force:
+            for doc in docs:
+                if doc.status == DocumentStatus.PROCESSING:
+                    raise DocumentProcessingConflictError()
 
         # 2. Perform deletions
         for doc in docs:
@@ -234,7 +232,6 @@ class DocumentService:
                 await self.vector_store.delete_by_document(doc.id)
             except Exception as e:
                 logger.exception("Failed to delete vectors for document %s", doc.id)
-                from ..core.exceptions import VectorStoreDeletionError
 
                 raise VectorStoreDeletionError() from e
 

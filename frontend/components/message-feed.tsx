@@ -1,7 +1,7 @@
 'use client';
 
 import { useDocuments } from '@/hooks/use-documents';
-import { sendMessageAction, getRagPhaseAction, getReadyStatusAction } from '@/lib/api';
+import { getRagPhaseAction, getReadyStatusAction } from '@/lib/api';
 import { useEffect, useRef, useState } from 'react';
 import { AgentChat, AgentMessage, RagPhase } from './ui/agent-chat';
 
@@ -81,21 +81,34 @@ export function MessageFeed({
     if (m.sources && m.sources.length > 0) {
       content +=
         '\n\n**Sources:**\n' +
-        m.sources.map((s: { document_name: string }) => `- ${s.document_name}`).join('\n');
+        m.sources.map((s: any) => {
+          const meta = [
+            s.page_number ? `p.${s.page_number}` : null,
+            s.section ? `§ ${s.section}` : null
+          ].filter(Boolean).join(', ');
+          const name = s.original_file_name || s.document_name || 'Unknown Document';
+          return `- ${name}${meta ? ` (${meta})` : ''}`;
+        }).join('\n');
+    }
+
+    const parts: any[] = [];
+    if (content.trim()) {
+      parts.push({ type: 'text', text: content });
     }
 
     if (m.error) {
-      return {
-        id: m.id || `msg-${idx}`,
-        role: m.role,
-        parts: [{ type: 'error', title: 'Error', message: m.error }],
-      };
+      parts.push({ type: 'error', title: 'Error', message: m.error });
+    }
+
+    // If we have neither content nor error but it's an assistant message, we should at least have an empty text part so the bubble renders, unless we strictly rely on shimmer.
+    if (parts.length === 0) {
+      parts.push({ type: 'text', text: '' });
     }
 
     return {
       id: m.id || `msg-${idx}`,
       role: m.role,
-      parts: [{ type: 'text', text: content }],
+      parts,
     };
   });
 
@@ -109,29 +122,114 @@ export function MessageFeed({
       content: question,
       created_at: new Date().toISOString(),
     };
+    const assistantMessageId = `assistant-${Date.now()}`;
 
     setMessages((prev) => [...prev, tempUserMessage]);
     setIsPending(true);
 
-    const result = await sendMessageAction(sessionId, question);
+    let assistantMessageCreated = false;
+    const ensureAssistantMessage = () => {
+      if (!assistantMessageCreated) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantMessageId,
+            role: 'assistant',
+            content: '',
+            sources: [],
+            created_at: new Date().toISOString(),
+          }
+        ]);
+        assistantMessageCreated = true;
+      }
+    };
 
-    setIsPending(false);
-    if (!result.success) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `error-${Date.now()}`,
-          role: 'assistant' as const,
-          content: 'Sorry, I encountered an error generating the response.',
-          error: result.error?.message,
-        },
-      ]);
-    } else {
-      setMessages((prev) => {
-        const exists = prev.find((m) => m.id === result.response?.id);
-        if (exists) return prev;
-        return result.response ? [...prev, result.response] : prev;
+    try {
+      const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+      const response = await fetch(`${BACKEND_URL}/api/v1/chat/sessions/${sessionId}/messages/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to start stream');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader available');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+
+        // Keep the last partial chunk in the buffer
+        buffer = events.pop() || '';
+
+        for (const eventBlock of events) {
+          if (!eventBlock.trim()) continue;
+
+          const lines = eventBlock.split('\n');
+          let eventName = 'message';
+          let eventData = '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventName = line.substring(7).trim();
+            } else if (line.startsWith('data: ')) {
+              eventData = line.substring(6).trim();
+            } else if (line === ': ping') {
+              eventName = 'ping';
+            }
+          }
+
+          if (eventName === 'ping') continue;
+
+          try {
+            const parsed = JSON.parse(eventData);
+            if (eventName === 'sources') {
+              ensureAssistantMessage();
+              setMessages((prev) => prev.map((m) =>
+                m.id === assistantMessageId ? { ...m, sources: parsed } : m
+              ));
+            } else if (eventName === 'token') {
+              ensureAssistantMessage();
+              setMessages((prev) => prev.map((m) =>
+                m.id === assistantMessageId ? { ...m, content: m.content + parsed.text } : m
+              ));
+            } else if (eventName === 'done') {
+              ensureAssistantMessage();
+              // Finalize message with actual backend ID
+              setMessages((prev) => prev.map((m) =>
+                m.id === assistantMessageId ? { ...m, id: parsed.message_id } : m
+              ));
+            } else if (eventName === 'error') {
+              ensureAssistantMessage();
+              setMessages((prev) => prev.map((m) =>
+                m.id === assistantMessageId ? { ...m, error: parsed.message } : m
+              ));
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE JSON:', eventData);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      ensureAssistantMessage();
+      setMessages((prev) => prev.map((m) =>
+        m.id === assistantMessageId
+          ? { ...m, error: 'Connection failed or stream interrupted.' }
+          : m
+      ));
+    } finally {
+      setIsPending(false);
     }
   };
 

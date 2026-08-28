@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -44,10 +43,8 @@ class BatchUploadResponse(BaseModel):
 
     results: list[BatchUploadResult]
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-
-__all__: list[Any] = [
+__all__: list[str] = [
     "BatchUploadError",
     "BatchUploadResponse",
     "BatchUploadResult",

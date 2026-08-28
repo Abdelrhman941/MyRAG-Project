@@ -4,11 +4,36 @@ Each Protocol defines the interface that a concrete adapter must satisfy.
 Services depend only on these protocols; never on concrete adapters.
 """
 
+from collections.abc import AsyncIterator
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 from uuid import UUID
 
 from ..models import Chunk
+
+
+class VectorSearchHit(TypedDict):
+    id: str | int
+    score: float
+    payload: dict[str, Any]
+
+
+class SessionData(TypedDict):
+    id: UUID
+    title: str | None
+    summary: str | None
+    summarized_message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessageData(TypedDict):
+    id: UUID
+    session_id: UUID
+    role: str
+    content: str
+    created_at: datetime
 
 
 class VectorStorePort(Protocol):
@@ -42,7 +67,7 @@ class VectorStorePort(Protocol):
         query_sparse: dict[int, float] | None,
         session_id: UUID,
         limit: int = 5,
-    ) -> list[dict[str, Any]]:
+    ) -> list[VectorSearchHit]:
         """Retrieve the top-*limit* chunks closest to the query vectors.
 
         Performs a hybrid (dense + sparse) retrieval against the vector store
@@ -78,13 +103,13 @@ class SessionRepositoryPort(Protocol):
         """Create a new session and return its ID."""
         ...
 
-    async def get_session(self, session_id: UUID) -> dict[str, Any] | None:
+    async def get_session(self, session_id: UUID) -> SessionData | None:
         """Return the session info (id, title, summary, created_at, updated_at)."""
         ...
 
     async def list_sessions(
         self, limit: int = 50, offset: int = 0
-    ) -> list[dict[str, Any]]:
+    ) -> list[SessionData]:
         """List sessions ordered by created_at desc."""
         ...
 
@@ -94,22 +119,32 @@ class SessionRepositoryPort(Protocol):
 
     async def add_message(
         self, session_id: UUID, role: str, content: str
-    ) -> dict[str, Any]:
+    ) -> MessageData:
         """Add a message to the session."""
         ...
 
-    async def list_messages(self, session_id: UUID) -> list[dict[str, Any]]:
+    async def count_messages(self, session_id: UUID) -> int:
+        """Count all messages for a session."""
+        ...
+
+    async def list_messages(self, session_id: UUID) -> list[MessageData]:
         """List all messages for a session (oldest first)."""
         ...
 
-    async def get_recent_messages(
-        self, session_id: UUID, n: int
-    ) -> list[dict[str, Any]]:
+    async def get_messages(
+        self, session_id: UUID, offset: int, limit: int
+    ) -> list[MessageData]:
+        """List a slice of messages (oldest first) using offset and limit."""
+        ...
+
+    async def get_recent_messages(self, session_id: UUID, n: int) -> list[MessageData]:
         """List the last N messages for a session (oldest first)."""
         ...
 
-    async def update_summary(self, session_id: UUID, summary: str) -> None:
-        """Update the long-term summary for a session."""
+    async def update_summary(
+        self, session_id: UUID, summary: str, summarized_count: int
+    ) -> None:
+        """Update the long-term summary and summarized count for a session."""
         ...
 
     async def update_title(self, session_id: UUID, title: str) -> None:
@@ -124,4 +159,10 @@ class LLMProviderPort(Protocol):
         self, messages: list[dict[str, str]], temperature: float = 0.7
     ) -> str:
         """Generate a text response given a list of chat messages."""
+        ...
+
+    def generate_stream(
+        self, messages: list[dict[str, str]], temperature: float = 0.7
+    ) -> AsyncIterator[str]:
+        """Stream the generated response back token by token."""
         ...

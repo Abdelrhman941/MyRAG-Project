@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .apis import (
     api_v1_router,
@@ -21,11 +24,16 @@ from .core import (
     setup_logging,
 )
 from .embeddings.model import get_embedding_model
+from .infrastructure import DocumentStorage, QdrantVectorStore
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
+
+    app.state.http_client = httpx.AsyncClient()
+    app.state.document_storage = DocumentStorage()
+    app.state.vector_store = QdrantVectorStore(settings)
 
     def _load_model() -> None:
         get_embedding_model(settings.EMBEDDING_MODEL)
@@ -48,7 +56,22 @@ async def lifespan(app: FastAPI):
 
     app.state.model_load_task = task
 
+    from arq import create_pool
+    from arq.connections import RedisSettings
+
+    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    app.state.arq_pool = await create_pool(redis_settings)
+
     yield
+
+    await app.state.http_client.aclose()
+    if hasattr(app.state.vector_store, "client") and hasattr(
+        app.state.vector_store.client, "close"
+    ):
+        await app.state.vector_store.client.close()
+
+    if hasattr(app.state, "arq_pool"):
+        await app.state.arq_pool.close()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -69,6 +92,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.state.limiter = limiter
+
+    # Note: allow_credentials=True + allow_origins=["*"] is spec-invalid.
+    # CORS_ORIGINS must remain an explicit whitelist.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)

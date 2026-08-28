@@ -87,6 +87,7 @@ export async function getMessages(sessionId: string): Promise<Message[] | null> 
 }
 
 export async function getDocuments(sessionId: string): Promise<Document[] | null> {
+  console.log('[DEBUG] getDocuments called for', sessionId);
   try {
     return await apiFetch<Document[]>(`/api/v1/chat/sessions/${sessionId}/documents`, {
       next: { tags: [`documents-${sessionId}`], revalidate: 0 },
@@ -123,10 +124,11 @@ export async function bootstrapSessionAction() {
 export async function deleteSessionAction(
   sessionId: string,
   currentSessionId: string | undefined,
-  otherSessions: Session[]
+  otherSessions: Session[],
+  force: boolean = false
 ) {
   try {
-    await apiFetch(`/api/v1/chat/sessions/${sessionId}`, { method: 'DELETE' });
+    await apiFetch(`/api/v1/chat/sessions/${sessionId}${force ? '?force=true' : ''}`, { method: 'DELETE' });
   } catch (e: unknown) {
     return {
       success: false,

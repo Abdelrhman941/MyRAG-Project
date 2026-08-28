@@ -2,12 +2,18 @@ import asyncio
 import logging
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..chunking import chunk
 from ..core import DocumentStatus
 from ..core.config import Settings
-from ..core.exceptions import ParsingError, StorageError
+from ..core.exceptions import (
+    ParsingError,
+    PermanentIngestionError,
+    StorageError,
+    TransientIngestionError,
+)
 from ..embeddings import get_embedding_model
 from ..infrastructure.ports import FileStoragePort, VectorStorePort
 from ..models import Document
@@ -52,35 +58,34 @@ class IngestionService:
                 content = await self.storage.read(
                     f"{doc.id}{doc.document_type.extension}"
                 )
-            except StorageError:
+            except StorageError as e:
                 logger.exception("Storage error during ingestion for %s", document_id)
-                await self._fail_document(doc, "storage_error")
-                return
+
+                raise TransientIngestionError(reason="storage_error") from e
 
             # 2. Parse
             try:
-                segments = parse(content, doc.document_type, doc.id)
-            except ParsingError:
+                segments = await asyncio.to_thread(
+                    parse, content, doc.document_type, doc.id
+                )
+            except ParsingError as e:
                 logger.exception("Parsing failed for %s", document_id)
-                await self._fail_document(doc, "parsing_error")
-                return
-            except Exception:
+
+                raise PermanentIngestionError(reason="parsing_error") from e
+            except Exception as e:
                 logger.exception("Unexpected error during parsing for %s", document_id)
-                await self._fail_document(doc, "internal_error")
-                return
+
+                raise TransientIngestionError(reason="internal_error") from e
 
             if not segments:
-                await self._fail_document(doc, "no_extractable_text")
-                return
+                raise PermanentIngestionError(reason="no_extractable_text")
 
             # 3. Chunk
-            chunks = chunk(segments, doc.id)
+            chunks = await asyncio.to_thread(chunk, segments, doc.id)
             if not chunks:
-                await self._fail_document(doc, "no_extractable_text")
-                return
+                raise PermanentIngestionError(reason="no_extractable_text")
 
             # 4. Embed + Upsert in batches
-            # Load singleton; first call downloads/loads BGE-M3 — expected slow
             model = get_embedding_model(self.settings.EMBEDDING_MODEL)
             await self.vector_store.ensure_collection()
 
@@ -91,37 +96,47 @@ class IngestionService:
             }
 
             batch_size = self.settings.EMBEDDING_BATCH_SIZE
+
             for i in range(0, len(chunks), batch_size):
+                # Delete-while-ingesting guard: bypass identity map cache
+                doc_exists = await self.db.scalar(
+                    select(Document.id).where(Document.id == document_id)
+                )
+                if not doc_exists:
+                    logger.info(
+                        "Document %s deleted during ingestion; aborting silently.",
+                        document_id,
+                    )
+                    return
+
                 batch_chunks = chunks[i : i + batch_size]
                 texts = [c.text for c in batch_chunks]
 
                 try:
-                    # encode_batch is CPU-bound; run in thread to not block event loop
                     dense, sparse = await asyncio.to_thread(
                         model.encode_batch, texts, self.settings.EMBEDDING_BATCH_SIZE
                     )
-                except Exception:
+                except Exception as e:
                     logger.exception(
                         "Embedding failed for %s",
                         document_id,
                         extra={"event": "ingestion.embedding_error"},
                     )
-                    await self._fail_document(doc, "embedding_error")
-                    return
+
+                    raise TransientIngestionError(reason="embedding_error") from e
 
                 try:
                     await self.vector_store.upsert_chunks(
                         batch_chunks, dense, sparse, payload_metadata
                     )
-                except Exception:
-                    # Qdrant unreachable -> event=ingestion.qdrant_unavailable
+                except Exception as e:
                     logger.exception(
                         "Vector store upsert failed for %s",
                         document_id,
                         extra={"event": "ingestion.qdrant_unavailable"},
                     )
-                    await self._fail_document(doc, "qdrant_unavailable")
-                    return
+
+                    raise TransientIngestionError(reason="qdrant_unavailable") from e
 
             # 5. Success
             doc.status = DocumentStatus.READY
@@ -132,11 +147,14 @@ class IngestionService:
                 extra={"event": "ingestion.status", "status": "ready"},
             )
 
-        except Exception:
+        except (TransientIngestionError, PermanentIngestionError):
+            raise
+        except Exception as e:
             logger.exception("Unhandled error during ingestion for %s", document_id)
-            await self._fail_document(doc, "internal_error")
 
-    async def _fail_document(self, doc: Document, reason: str) -> None:
+            raise TransientIngestionError(reason="internal_error") from e
+
+    async def fail_document(self, doc: Document, reason: str) -> None:
         try:
             await self.vector_store.delete_by_document(doc.id)
         except Exception:
