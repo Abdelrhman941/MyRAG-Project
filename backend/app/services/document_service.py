@@ -182,7 +182,7 @@ class DocumentService:
     async def delete_document(self, document_id: UUID) -> None:
         """
         Delete a document and all its associated data.
-        Order: Qdrant Vectors -> Filesystem -> DB.
+        Order: DB -> Filesystem -> Qdrant Vectors.
         """
         if not self.vector_store:
             raise RuntimeError("vector_store is required for deletion")
@@ -196,20 +196,22 @@ class DocumentService:
         if doc.status == DocumentStatus.PROCESSING:
             raise DocumentProcessingConflictError()
 
-        # 3. Delete from Vector Store (Qdrant)
+        # 3. Mark as DELETING in DB
+        doc.status = DocumentStatus.DELETING
+        await self.db.commit()
+
+        # 4. Delete from Vector Store (Qdrant)
         try:
             await self.vector_store.delete_by_document(document_id)
         except Exception as e:
             logger.exception("Failed to delete vectors for document %s", document_id)
-
             raise VectorStoreDeletionError() from e
 
-        # 4. Delete from Filesystem
-        # If this fails, it naturally bubbles up as a 500 (StorageError).
+        # 5. Delete from Filesystem
         filename = f"{doc.id}{doc.document_type.extension}"
         await self.storage.delete(filename)
 
-        # 5. Delete from DB
+        # 6. Finally, delete the DB row
         await self.db.delete(doc)
         await self.db.commit()
 
@@ -217,7 +219,9 @@ class DocumentService:
         if not self.vector_store:
             raise RuntimeError("vector_store is required for deletion")
 
-        docs = await self.list_documents(session_id, limit=10000)
+        stmt = select(Document).where(Document.session_id == session_id)
+        result = await self.db.execute(stmt)
+        docs = list(result.scalars().all())
 
         # 1. Preflight check for PROCESSING status
         if not force:
@@ -225,16 +229,25 @@ class DocumentService:
                 if doc.status == DocumentStatus.PROCESSING:
                     raise DocumentProcessingConflictError()
 
-        # 2. Perform deletions
+        # 2. Mark all as DELETING in DB
+        for doc in docs:
+            doc.status = DocumentStatus.DELETING
+        await self.db.commit()
+
+        # 3. Perform external deletions
         for doc in docs:
             # Delete vectors
             try:
                 await self.vector_store.delete_by_document(doc.id)
             except Exception as e:
                 logger.exception("Failed to delete vectors for document %s", doc.id)
-
                 raise VectorStoreDeletionError() from e
 
             # Delete file
             filename = f"{doc.id}{doc.document_type.extension}"
             await self.storage.delete(filename)
+
+        # 4. Finally, delete the DB rows
+        for doc in docs:
+            await self.db.delete(doc)
+        await self.db.commit()

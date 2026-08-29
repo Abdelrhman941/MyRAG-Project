@@ -87,7 +87,6 @@ class IngestionService:
 
             # 4. Embed + Upsert in batches
             model = get_embedding_model(self.settings.EMBEDDING_MODEL)
-            await self.vector_store.ensure_collection()
 
             payload_metadata = {
                 "original_file_name": doc.original_file_name,

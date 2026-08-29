@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from uuid import UUID
 
@@ -25,7 +26,6 @@ class RetrievalService:
 
         # Embed query
         model = get_embedding_model(self.settings.EMBEDDING_MODEL)
-        import asyncio
 
         dense, sparse = await asyncio.to_thread(model.encode_batch, [query], 1)
 

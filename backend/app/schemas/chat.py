@@ -19,6 +19,7 @@ class ChatSessionListResponse(BaseModel):
 class ChatMessageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: UUID
     role: str
     content: str
     created_at: datetime
@@ -26,3 +27,16 @@ class ChatMessageResponse(BaseModel):
 
 class ChatMessageListResponse(BaseModel):
     messages: list[ChatMessageResponse]
+
+
+class SourceCitation(BaseModel):
+    document_id: str
+    original_file_name: str
+    chunk_index: int
+    page_number: int | None = None
+    section: str | None = None
+
+
+class ChatAnswer(BaseModel):
+    answer: str
+    sources: list[SourceCitation]

@@ -33,6 +33,8 @@ def get_session_maker() -> async_sessionmaker[AsyncSession]:
             ) -> None:
                 cursor = dbapi_connection.cursor()
                 cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=5000")
                 cursor.close()
 
         _session_maker = async_sessionmaker(

@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "llama-3.3-70b-versatile"
     LLM_CONTEXT_TOKEN_BUDGET: int = 6000
     LLM_TIMEOUT_S: int = 60
+    LLM_MAX_RETRIES: int = 3
 
     @model_validator(mode="after")
     def _ensure_upload_dir(self) -> "Settings":

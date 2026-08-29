@@ -14,6 +14,7 @@ from .infrastructure import (
     VectorStorePort,
 )
 from .infrastructure import get_db as _get_db
+from .infrastructure.ports import SessionData
 from .retrieval.service import RetrievalService
 from .services import ChatService, DocumentService
 
@@ -67,17 +68,17 @@ type SessionRepositoryDep = Annotated[
 
 async def get_session_or_404(
     session_id: UUID, repository: SessionRepositoryDep
-) -> UUID:
-    """Verify session exists and return its ID, or raise 404."""
+) -> SessionData:
+    """Verify session exists and return it, or raise 404."""
 
     session = await repository.get_session(session_id)
     if not session:
         raise NotFoundError(message=f"Session {session_id} not found")
-    return session_id
+    return session
 
 
 type ValidSessionDep = Annotated[
-    UUID,
+    SessionData,
     Depends(get_session_or_404),
 ]
 

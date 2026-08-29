@@ -24,7 +24,7 @@ from .core import (
     setup_logging,
 )
 from .embeddings.model import get_embedding_model
-from .infrastructure import DocumentStorage, QdrantVectorStore
+from .infrastructure import DocumentStorage, build_vector_store
 
 
 @asynccontextmanager
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     app.state.http_client = httpx.AsyncClient()
     app.state.document_storage = DocumentStorage()
-    app.state.vector_store = QdrantVectorStore(settings)
+    app.state.vector_store = build_vector_store(settings)
 
     def _load_model() -> None:
         get_embedding_model(settings.EMBEDDING_MODEL)
@@ -60,7 +60,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from arq.connections import RedisSettings
 
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
-    app.state.arq_pool = await create_pool(redis_settings)
+    try:
+        app.state.arq_pool = await create_pool(redis_settings)
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Failed to create ARQ pool: {e}")
+        app.state.arq_pool = None
+
+    try:
+        await app.state.vector_store.ensure_collection()
+    except Exception as e:
+        logging.getLogger(__name__).error(
+            f"Failed to ensure vector store collection: {e}"
+        )
 
     yield
 

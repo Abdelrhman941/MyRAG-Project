@@ -130,18 +130,27 @@ class PermanentIngestionError(AppError):
         )
 
 
+class LLMProviderError(AppError):
+    status_code = 502
+    code = "llm_provider_error"
+    message = "The LLM provider encountered an error."
+
+
 __all__ = [
     "AppError",
     "DocumentProcessingConflictError",
     "DuplicateDocumentError",
     "EmptyQueryError",
     "FileTooLargeError",
+    "LLMProviderError",
     "MissingFilenameError",
     "NotFoundError",
     "ParsingError",
+    "PermanentIngestionError",
     "RetrievalError",
     "StorageError",
     "TooManyFilesError",
+    "TransientIngestionError",
     "UnsupportedDocumentTypeError",
     "VectorStoreDeletionError",
 ]

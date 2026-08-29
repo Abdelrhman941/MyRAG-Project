@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import NotFoundError
@@ -77,8 +77,6 @@ class SqliteSessionRepository:
         return self._message_to_dict(msg)
 
     async def count_messages(self, session_id: UUID) -> int:
-        from sqlalchemy import func
-
         stmt = select(func.count()).where(ChatMessageModel.session_id == session_id)
         result = await self.session.execute(stmt)
         return result.scalar_one() or 0

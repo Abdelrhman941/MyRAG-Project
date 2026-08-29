@@ -23,8 +23,8 @@ def healthz() -> dict[str, str]:
 
 
 @system_router.get("/readyz")
-def readyz(request: Request, response: Response) -> dict[str, str]:
-    """Readiness probe checking model load status."""
+async def readyz(request: Request, response: Response) -> dict[str, str]:
+    """Readiness probe checking model load status and Qdrant."""
     error = getattr(request.app.state, "model_error", None)
     if error:
         response.status_code = 503
@@ -34,5 +34,15 @@ def readyz(request: Request, response: Response) -> dict[str, str]:
     if not is_ready:
         response.status_code = 503
         return {"status": "warming"}
+
+    try:
+        vs = request.app.state.vector_store
+        exists = await vs.client.collection_exists(vs.collection_name)
+        if not exists:
+            response.status_code = 503
+            return {"status": "qdrant_not_ready"}
+    except Exception as e:
+        response.status_code = 503
+        return {"status": "qdrant_error", "detail": str(e)}
 
     return {"status": "ready"}

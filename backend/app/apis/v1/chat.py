@@ -6,13 +6,14 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     File,
+    Query,
     Request,
     Response,
     UploadFile,
     status,
 )
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...core import get_settings, limiter
 from ...core.exceptions import AppError, TooManyFilesError
@@ -32,11 +33,11 @@ from ...schemas import (
     DocumentResponse,
 )
 from ...schemas.chat import (
+    ChatAnswer,
     ChatMessageListResponse,
     ChatSessionListResponse,
     ChatSessionResponse,
 )
-from ...services.chat_service import ChatAnswer
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -58,39 +59,42 @@ async def list_sessions(repository: SessionRepositoryDep) -> Any:
 
 @router.get("/sessions/{session_id}/messages", response_model=ChatMessageListResponse)
 async def list_messages(
-    session_id: ValidSessionDep, repository: SessionRepositoryDep
+    session: ValidSessionDep,
+    repository: SessionRepositoryDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Any:
-    messages = await repository.list_messages(session_id)
+    messages = await repository.get_messages(session["id"], offset=offset, limit=limit)
     return {"messages": messages}
 
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(
-    session_id: ValidSessionDep,
+    session: ValidSessionDep,
     repository: SessionRepositoryDep,
     doc_service: DocumentServiceDep,
     force: bool = False,
 ) -> Response:
-    await doc_service.delete_session_data(session_id, force=force)
+    await doc_service.delete_session_data(session["id"], force=force)
 
-    await repository.delete_session(session_id)
+    await repository.delete_session(session["id"])
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 class ChatRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=8000)
 
 
 @router.post("/sessions/{session_id}/messages/stream", response_class=StreamingResponse)
 async def ask_question_stream(
-    session_id: ValidSessionDep,
+    session: ValidSessionDep,
     request: ChatRequest,
     chat_service: ChatServiceDep,
     background_tasks: BackgroundTasks,
 ) -> StreamingResponse:
     async def event_generator() -> AsyncGenerator[str, None]:
         async for event in chat_service.answer_stream(
-            session_id, request.question, background_tasks
+            session["id"], session, request.question, background_tasks
         ):
             if event["event"] == "ping":
                 yield ": ping\n\n"
@@ -109,12 +113,14 @@ async def ask_question_stream(
 
 @router.post("/sessions/{session_id}/messages", response_model=ChatAnswer)
 async def ask_question(
-    session_id: ValidSessionDep,
+    session: ValidSessionDep,
     request: ChatRequest,
     chat_service: ChatServiceDep,
     background_tasks: BackgroundTasks,
 ) -> Any:
-    return await chat_service.answer(session_id, request.question, background_tasks)
+    return await chat_service.answer(
+        session["id"], session, request.question, background_tasks
+    )
 
 
 @router.post(
@@ -125,14 +131,20 @@ async def ask_question(
 )
 @limiter.limit(lambda: get_settings().UPLOAD_RATE_LIMIT)
 async def upload_document(
-    session_id: ValidSessionDep,
+    session: ValidSessionDep,
     request: Request,
     file: UploadFile,
     doc_service: DocumentServiceDep,
     arq_pool: ArqPoolDep,
 ) -> DocumentResponse:
     """Upload a single document to the RAG system."""
-    document = await doc_service.upload_document(file, session_id)
+    if request.app.state.arq_pool is None:
+        raise AppError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="queue_unavailable",
+            message="Background processing queue is unavailable.",
+        )
+    document = await doc_service.upload_document(file, session["id"])
     await arq_pool.enqueue_job("ingest_document", str(document.id))
     return DocumentResponse.model_validate(document)
 
@@ -145,7 +157,7 @@ async def upload_document(
 )
 @limiter.limit(lambda: get_settings().UPLOAD_RATE_LIMIT)
 async def upload_batch(
-    session_id: ValidSessionDep,
+    session: ValidSessionDep,
     request: Request,
     files: Annotated[list[UploadFile], File(...)],
     doc_service: DocumentServiceDep,
@@ -156,6 +168,13 @@ async def upload_batch(
 
     Returns one result entry per file; a per-file error never fails the batch.
     """
+    if request.app.state.arq_pool is None:
+        raise AppError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="queue_unavailable",
+            message="Background processing queue is unavailable.",
+        )
+
     if len(files) > settings.MAX_FILES_PER_REQUEST:
         raise TooManyFilesError(
             message=(
@@ -165,7 +184,7 @@ async def upload_batch(
         )
 
     raw_results: list[Document | BaseException] = await doc_service.upload_batch(
-        files, session_id
+        files, session["id"]
     )
 
     results: list[BatchUploadResult] = []
@@ -204,11 +223,11 @@ async def upload_batch(
     summary="List documents",
 )
 async def list_documents(
-    session_id: ValidSessionDep,
+    session: ValidSessionDep,
     doc_service: DocumentServiceDep,
-    limit: int = 50,
-    offset: int = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentResponse]:
     """List all documents, newest first."""
-    docs = await doc_service.list_documents(session_id, limit=limit, offset=offset)
+    docs = await doc_service.list_documents(session["id"], limit=limit, offset=offset)
     return [DocumentResponse.model_validate(d) for d in docs]

@@ -1,18 +1,14 @@
+import asyncio
+import json
 import logging
 from typing import Any
 
 import httpx
 
 from ...core import Settings
-from ...core.exceptions import AppError
+from ...core.exceptions import LLMProviderError
 
 logger = logging.getLogger(__name__)
-
-
-class LLMProviderError(AppError):
-    status_code = 502
-    code = "llm_provider_error"
-    message = "The LLM provider encountered an error."
 
 
 class OpenAICompatibleLLM:
@@ -39,6 +35,25 @@ class OpenAICompatibleLLM:
             timeout=self.settings.LLM_TIMEOUT_S,
         )
 
+    async def _retry_backoff(
+        self, attempt: int, max_retries: int, error: Exception
+    ) -> None:
+        if attempt < max_retries - 1:
+            wait_time = 2**attempt
+            logger.warning(
+                "LLM Provider error (attempt %d/%d), retrying in %ds: %s",
+                attempt + 1,
+                max_retries,
+                wait_time,
+                error,
+            )
+            await asyncio.sleep(wait_time)
+        else:
+            logger.error(
+                "LLM Provider failed after %d attempts: %s", max_retries, error
+            )
+            raise LLMProviderError() from error
+
     async def generate(
         self, messages: list[dict[str, str]], temperature: float = 0.7
     ) -> str:
@@ -48,29 +63,19 @@ class OpenAICompatibleLLM:
             "temperature": temperature,
         }
 
-        try:
-            response = await self._call_api(payload)
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code >= 500:
-                logger.warning(f"LLM Provider 5xx error, retrying once: {e}")
-                try:
-                    response = await self._call_api(payload)
-                    response.raise_for_status()
-                except Exception as retry_e:
-                    logger.error(f"LLM Provider retry failed: {retry_e}")
-                    raise LLMProviderError() from retry_e
-            else:
-                logger.error(f"LLM Provider 4xx error: {e.response.text}")
-                raise LLMProviderError() from e
-        except httpx.RequestError as e:
-            logger.warning(f"LLM Provider network error, retrying once: {e}")
+        max_retries = self.settings.LLM_MAX_RETRIES
+        for attempt in range(max_retries):
             try:
                 response = await self._call_api(payload)
                 response.raise_for_status()
-            except Exception as retry_e:
-                logger.error(f"LLM Provider retry failed: {retry_e}")
-                raise LLMProviderError() from retry_e
+                break
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code < 500:
+                    logger.error(f"LLM Provider 4xx error: {e.response.text}")
+                    raise LLMProviderError() from e
+                await self._retry_backoff(attempt, max_retries, e)
+            except Exception as e:
+                await self._retry_backoff(attempt, max_retries, e)
 
         try:
             data = response.json()
@@ -82,8 +87,6 @@ class OpenAICompatibleLLM:
             ) from e
 
     async def _stream_attempt(self, payload: dict[str, Any]) -> Any:
-        import json
-
         async with self.client.stream(
             "POST",
             self.endpoint,
@@ -123,9 +126,7 @@ class OpenAICompatibleLLM:
         }
 
         tokens_emitted = 0
-        max_retries = 3
-
-        import asyncio
+        max_retries = self.settings.LLM_MAX_RETRIES
 
         for attempt in range(max_retries):
             try:
@@ -133,24 +134,16 @@ class OpenAICompatibleLLM:
                     tokens_emitted += 1
                     yield token
                 break  # Success
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code < 500:
+                    logger.error(f"LLM Provider 4xx error: {e.response.text}")
+                    raise LLMProviderError() from e
+                if tokens_emitted > 0:
+                    logger.error(f"LLM stream failed mid-stream: {e}")
+                    raise LLMProviderError() from e
+                await self._retry_backoff(attempt, max_retries, e)
             except Exception as e:
                 if tokens_emitted > 0:
                     logger.error(f"LLM stream failed mid-stream: {e}")
                     raise LLMProviderError() from e
-
-                if attempt < max_retries - 1:
-                    wait_time = 2**attempt  # 1s, 2s
-                    logger.warning(
-                        "LLM stream failed before tokens (attempt %d/%d), "
-                        "retrying in %ds: %s",
-                        attempt + 1,
-                        max_retries,
-                        wait_time,
-                        e,
-                    )
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.error(
-                        "LLM stream failed after %d attempts: %s", max_retries, e
-                    )
-                    raise LLMProviderError() from e
+                await self._retry_backoff(attempt, max_retries, e)

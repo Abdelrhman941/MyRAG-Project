@@ -9,6 +9,12 @@ from .ports import (
 )
 from .session_store import NotFoundError, SqliteSessionRepository
 from .vector_store.qdrant import QdrantVectorStore
+from ..core.config import Settings
+
+
+def build_vector_store(settings: Settings) -> VectorStorePort:
+    return QdrantVectorStore(settings)
+
 
 __all__ = [
     "DocumentStorage",
@@ -20,5 +26,6 @@ __all__ = [
     "SessionRepositoryPort",
     "SqliteSessionRepository",
     "VectorStorePort",
+    "build_vector_store",
     "get_db",
 ]
