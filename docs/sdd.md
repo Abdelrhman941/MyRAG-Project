@@ -111,6 +111,7 @@ Full detail: [diagrams/api-interactions.md](diagrams/api-interactions.md).
 | `GET /`                                           | ✅      | App metadata                                             |
 | `GET /healthz`                                    | ✅      | Liveness probe (always 200 ok)                           |
 | `GET /readyz`                                     | ✅      | Readiness probe (503 while warming, 200 when ready)      |
+| `GET /api/v1/system/config`                       | ✅      | Frontend client limits and constraints                   |
 | `POST /api/v1/chat/sessions/{id}/documents`       | ✅      | Upload one document                                      |
 | `POST /api/v1/chat/sessions/{id}/documents/batch` | ✅      | Upload up to 10 files, rate-limited 10/hour/IP           |
 | `GET /api/v1/chat/sessions/{id}/documents`        | ✅      | List documents                                           |

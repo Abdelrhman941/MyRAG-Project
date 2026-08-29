@@ -46,3 +46,16 @@ async def readyz(request: Request, response: Response) -> dict[str, str]:
         return {"status": "qdrant_error", "detail": str(e)}
 
     return {"status": "ready"}
+
+
+@system_router.get("/api/v1/system/config")
+def config(settings: SettingsDep) -> dict:
+    from ..core.enums.document import DocumentType
+
+    return {
+        "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+        "max_files_per_request": settings.MAX_FILES_PER_REQUEST,
+        "accepted_extensions": [t.extension for t in DocumentType],
+        "app_name": settings.APP_NAME,
+        "app_version": settings.APP_VERSION,
+    }

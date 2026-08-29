@@ -47,29 +47,11 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export async function getSessions(): Promise<Session[]> {
-  try {
-    // Backend returns { sessions: [...] } — unwrap the envelope
-    const data = await apiFetch<{ sessions: Session[] }>('/api/v1/chat/sessions', {
-      next: { tags: ['sessions'], revalidate: 0 },
-    });
-    return data.sessions;
-  } catch (e) {
-    console.error('Failed to fetch sessions', e);
-    return [];
-  }
-}
-
-export async function getRagPhaseAction(sessionId: string): Promise<string> {
-  try {
-    const data = await apiFetch<{ phase: string }>(
-      `/api/v1/chat/sessions/${sessionId}/rag-phase`,
-      { next: { revalidate: 0 }, cache: 'no-store' }
-    );
-    return data.phase;
-  } catch (e: unknown) {
-    if ((e as { status?: number })?.status === 404) return 'idle';
-    throw e;
-  }
+  // Backend failures must reach the route error boundary instead of rendering an empty sidebar.
+  const data = await apiFetch<{ sessions: Session[] }>('/api/v1/chat/sessions', {
+    next: { tags: ['sessions'], revalidate: 0 },
+  });
+  return data.sessions;
 }
 
 export async function getMessages(sessionId: string): Promise<Message[] | null> {
@@ -87,7 +69,6 @@ export async function getMessages(sessionId: string): Promise<Message[] | null> 
 }
 
 export async function getDocuments(sessionId: string): Promise<Document[] | null> {
-  console.log('[DEBUG] getDocuments called for', sessionId);
   try {
     return await apiFetch<Document[]>(`/api/v1/chat/sessions/${sessionId}/documents`, {
       next: { tags: [`documents-${sessionId}`], revalidate: 0 },
@@ -169,59 +150,6 @@ export async function deleteDocumentAction(documentId: string, sessionId: string
       error: (e as { data?: ApiError })?.data?.error || {
         code: 'unknown',
         message: 'Failed to delete document',
-      },
-    };
-  }
-}
-
-export async function uploadBatchAction(sessionId: string, formData: FormData) {
-  try {
-    const data = await apiFetch<{ results: { ok: boolean; document?: Document }[] }>(
-      `/api/v1/chat/sessions/${sessionId}/documents/batch`,
-      {
-        method: 'POST',
-        body: formData,
-      }
-    );
-    const results = data.results?.filter((r) => r.ok && r.document).map((r) => r.document) || [];
-    revalidatePath(`/chat/${sessionId}/documents`);
-    return { success: true, results };
-  } catch (e: unknown) {
-    return {
-      success: false,
-      error: (e as { data?: ApiError })?.data?.error || {
-        code: 'unknown',
-        message: 'Upload failed',
-      },
-    };
-  }
-}
-
-export async function sendMessageAction(sessionId: string, question: string) {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = await apiFetch<any>(`/api/v1/chat/sessions/${sessionId}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
-    });
-
-    const message: Message = {
-      id: `assistant-${Date.now()}`,
-      role: 'assistant',
-      content: data.answer,
-      sources: data.sources,
-      created_at: new Date().toISOString(),
-    };
-
-    revalidatePath('/chat', 'layout');
-    return { success: true, response: message };
-  } catch (e: unknown) {
-    return {
-      success: false,
-      error: (e as { data?: ApiError })?.data?.error || {
-        code: 'unknown',
-        message: 'Failed to send message',
       },
     };
   }
