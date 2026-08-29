@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RAG Assistant Frontend
 
-## Getting Started
+The frontend is a Next.js 16 App Router application for the RAG Assistant.
+It renders session-scoped chat and document management, consumes streamed chat
+responses, and displays backend readiness before starting a session.
 
-First, run the development server:
+## Development
+
+Use pnpm from this directory:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app runs at `http://localhost:3000` by default.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Configuration
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `BACKEND_API_URL` | Server Components, Server Actions, upload route | Private server-to-server backend origin. |
+| `NEXT_PUBLIC_API_URL` | Browser SSE client | Public backend origin used for streamed answers. Also acts as a local fallback for server calls. |
+| `NEXT_PUBLIC_APP_URL` | Metadata | Public frontend origin used for canonical metadata. |
 
-## Learn More
+For local development, the backend defaults to `http://127.0.0.1:8000` when
+neither backend URL is configured.
 
-To learn more about Next.js, take a look at the following resources:
+## Project organization
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `app/` contains routes, layouts, loading, error, route-handler boundaries,
+  and route-owned components in private `_components/` folders.
+- `features/chat/` contains the stream hook and chat-specific UI.
+- `features/documents/` contains the Zustand document cache, upload/delete hook,
+  and document manager.
+- `components/layout/` and `components/providers/` hold app-shell-only UI and
+  root providers.
+- `components/ui/` contains reusable Base UI/shadcn-style primitives only.
+- `lib/` contains configuration, typed API access, shared types, and utilities.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Verification
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm lint
+pnpm exec tsc --noEmit
+pnpm build
+```

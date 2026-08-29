@@ -1,4 +1,4 @@
-import { MessageFeed } from '@/components/message-feed';
+import { MessageFeed } from '@/features/chat/message-feed';
 import { getMessages, getSessions } from '@/lib/api';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
@@ -24,7 +24,7 @@ export default async function ChatSessionPage({ params }: ChatSessionPageProps) 
 
   return (
     <div className="flex flex-col h-full bg-muted/20">
-      <MessageFeed initialMessages={initialMessages || []} sessionId={sessionId} />
+      <MessageFeed key={sessionId} initialMessages={initialMessages} sessionId={sessionId} />
     </div>
   );
 }

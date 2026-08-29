@@ -8,7 +8,6 @@ export type StreamPhase = 'idle' | 'retrieving' | 'generating';
 
 export type ChatStreamMessage = Message & {
   clientId: string;
-  stopped?: boolean;
 };
 
 function makeClientId(prefix: string): string {
@@ -23,7 +22,7 @@ function withClientIds(messages: Message[]): ChatStreamMessage[] {
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 export function useChatStream(initialMessages: Message[], sessionId: string) {
@@ -33,17 +32,8 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
   const [phase, setPhase] = useState<StreamPhase>('idle');
   const [isStreaming, setIsStreaming] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
-  const activeAssistantRef = useRef<string | null>(null);
 
   const stop = useCallback(() => {
-    const assistantClientId = activeAssistantRef.current;
-    if (assistantClientId) {
-      setMessages((current) =>
-        current.map((message) =>
-          message.clientId === assistantClientId ? { ...message, stopped: true } : message
-        )
-      );
-    }
     controllerRef.current?.abort();
   }, []);
 
@@ -125,7 +115,6 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
         },
       ]);
       controllerRef.current = controller;
-      activeAssistantRef.current = assistantClientId;
       setPhase('retrieving');
       setIsStreaming(true);
 
@@ -150,7 +139,6 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
       } finally {
         if (controllerRef.current === controller) {
           controllerRef.current = null;
-          activeAssistantRef.current = null;
           setPhase('idle');
           setIsStreaming(false);
         }

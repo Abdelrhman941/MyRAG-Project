@@ -4,7 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 export default function ChatLayoutLoading() {
   return (
     <SidebarProvider>
-      <div className="w-[250px] border-r flex flex-col p-4 gap-4">
+      <div className="w-62.5 border-r flex flex-col p-4 gap-4">
         <Skeleton className="h-10 w-full rounded-xl" />
         <div className="mt-8 space-y-3">
           <Skeleton className="h-5 w-24 mb-4" />

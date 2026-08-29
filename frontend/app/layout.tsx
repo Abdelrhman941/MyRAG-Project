@@ -1,10 +1,10 @@
+import { ThemeProvider } from '@/components/providers/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ConfigProvider } from '@/lib/config';
+import { fetchAppConfig } from '@/lib/server-config';
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
-import { fetchAppConfig } from '@/lib/server-config';
-import { ConfigProvider } from '@/lib/config';
-import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });

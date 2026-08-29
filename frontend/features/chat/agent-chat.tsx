@@ -1,17 +1,12 @@
 'use client';
 
-import { Citations } from '@/components/chat/citations';
 import type { SourceCitation } from '@/lib/types';
-import { clsx, type ClassValue } from 'clsx';
-import { ArrowUp, FileText, Paperclip, Square, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { ArrowUp, Paperclip, Square } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { Citations } from './citations';
 
 export type ChatStatus = 'ready' | 'streaming' | 'submitted' | 'idle';
 
@@ -31,62 +26,6 @@ export type AgentMessage = {
   sources?: SourceCitation[];
 };
 
-export type AttachedImage = {
-  id: string;
-  filename: string;
-  url: string;
-  size?: number;
-};
-
-export type AttachedFile = {
-  id: string;
-  filename: string;
-  size?: number;
-};
-
-function ImageChip({ url, onRemove }: { url: string; onRemove?: () => void }) {
-  return (
-    <div className="relative group rounded-md overflow-hidden bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt="" className="h-10 w-10 object-cover" />
-      {onRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          className="absolute top-0 right-0 p-0.5 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <X size={12} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function FileChip({
-  filename,
-  onRemove,
-}: {
-  filename: string;
-  size?: number;
-  onRemove?: () => void;
-}) {
-  return (
-    <div className="relative group flex items-center gap-2 px-2 py-1 rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-600 dark:text-neutral-300">
-      <FileText size={14} className="text-neutral-500" />
-      <span className="truncate max-w-25">{filename}</span>
-      {onRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          className="ml-1 p-0.5 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <X size={12} />
-        </button>
-      )}
-    </div>
-  );
-}
-
 export type AgentChatProps = {
   messages: AgentMessage[];
   onSend?: (message: { role: 'user'; content: string }) => void;
@@ -98,11 +37,6 @@ export type AgentChatProps = {
   attachments?: {
     onAttach?: () => void;
     isUploading?: boolean;
-    onDrop?: (files: File[]) => void;
-    images?: AttachedImage[];
-    files?: AttachedFile[];
-    onRemoveImage?: (id: string) => void;
-    onRemoveFile?: (id: string) => void;
   };
   className?: string;
   disabled?: boolean;
@@ -111,12 +45,12 @@ export type AgentChatProps = {
 
 const SendIcon = () => <ArrowUp className="w-5 h-5" strokeWidth={2.5} />;
 const StopIcon = () => <Square className="w-3 h-3 fill-current" />;
-const PaperclipIcon = () => <Paperclip className="w-[18px] h-[18px]" />;
+const PaperclipIcon = () => <Paperclip className="w-4.5 h-4.5" />;
 
 function UserBubble({ text }: { text: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-neutral-100 dark:bg-[#303030] text-[15px] text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap break-words border dark:border-transparent">
+      <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-neutral-100 dark:bg-[#303030] text-[15px] text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap wrap-break-word border dark:border-transparent">
         {text}
       </div>
     </div>
@@ -128,7 +62,7 @@ const MARKDOWN_PLUGINS = [remarkGfm];
 const AssistantText = memo(function AssistantText({ text }: { text: string }) {
   return (
     <div className="flex justify-start">
-      <div className="max-w-[90%] text-[15px] leading-relaxed text-neutral-800 dark:text-neutral-200 break-words prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-neutral-100 dark:prose-pre:bg-[#202020] prose-pre:border dark:prose-pre:border-neutral-800">
+      <div className="max-w-[90%] text-[15px] leading-relaxed text-neutral-800 dark:text-neutral-200 wrap-break-word prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-neutral-100 dark:prose-pre:bg-[#202020] prose-pre:border dark:prose-pre:border-neutral-800">
         <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS}>{text}</ReactMarkdown>
       </div>
     </div>
@@ -166,16 +100,16 @@ function ThinkingBubble({ ragPhase = 'idle' }: { ragPhase?: string }) {
     <div className="flex justify-start">
       <div className="relative text-[14px] flex items-center gap-3 px-1">
         <div className="relative flex items-center justify-center w-2 h-2">
-          <div className="absolute inset-0 rounded-full bg-neutral-400/50 dark:bg-neutral-500/50 animate-ping [animation-duration:2.5s]" />
+          <div className="absolute inset-0 rounded-full bg-neutral-400/50 dark:bg-neutral-500/50 animate-ping animation-duration-[2.5s]" />
           <div className="relative w-1 h-1 rounded-full bg-neutral-500 dark:bg-neutral-400" />
         </div>
-        <div className="relative w-[230px] h-[20px]">
+        <div className="relative w-57.5 h-5">
           <div
             key={text}
             className={cn(
               'absolute inset-0 transition-opacity duration-200 font-medium',
-              'bg-gradient-to-r from-neutral-400 via-neutral-800 to-neutral-400 dark:from-neutral-500 dark:via-neutral-100 dark:to-neutral-500',
-              'bg-[length:200%_auto] text-transparent bg-clip-text animate-shimmerText'
+              'bg-linear-to-r from-neutral-400 via-neutral-800 to-neutral-400 dark:from-neutral-500 dark:via-neutral-100 dark:to-neutral-500',
+              'bg-size-[200%_auto] text-transparent bg-clip-text animate-shimmerText'
             )}
           >
             {text}
@@ -294,10 +228,6 @@ function InputBar({
   const isStreaming = status === 'streaming' || status === 'submitted';
   const hasInput = input.trim().length > 0;
 
-  const images = attachments?.images ?? [];
-  const files = attachments?.files ?? [];
-  const hasContext = images.length > 0 || files.length > 0;
-
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -328,43 +258,7 @@ function InputBar({
             }
           }}
         >
-          <div
-            className={cn(
-              'grid transition-[grid-template-rows] duration-200 ease-out',
-              hasContext ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-            )}
-          >
-            <div className="overflow-hidden">
-              {hasContext && (
-                <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3 pb-1">
-                  {images.map((img) => (
-                    <ImageChip
-                      key={img.id}
-                      url={img.url}
-                      onRemove={
-                        attachments?.onRemoveImage
-                          ? () => attachments.onRemoveImage!(img.id)
-                          : undefined
-                      }
-                    />
-                  ))}
-                  {files.map((f) => (
-                    <FileChip
-                      key={f.id}
-                      filename={f.filename}
-                      size={f.size}
-                      onRemove={
-                        attachments?.onRemoveFile
-                          ? () => attachments.onRemoveFile!(f.id)
-                          : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="pt-3 pb-1 pr-3 pl-4 min-h-[52px]">
+          <div className="pt-3 pb-1 pr-3 pl-4 min-h-13">
             <textarea
               ref={ref}
               value={input}
@@ -379,7 +273,7 @@ function InputBar({
               disabled={disabled}
               rows={1}
               className={cn(
-                'w-full resize-none bg-transparent border-0 outline-none text-[15px] leading-relaxed text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-500 overflow-hidden custom-scrollbar max-h-[200px]',
+                'w-full resize-none bg-transparent border-0 outline-none text-[15px] leading-relaxed text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-500 overflow-hidden custom-scrollbar max-h-50',
                 disabled && 'opacity-50 cursor-not-allowed'
               )}
             />

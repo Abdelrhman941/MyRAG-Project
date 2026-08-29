@@ -1,5 +1,5 @@
-import { create } from 'zustand';
 import { Document } from '@/lib/types';
+import { create } from 'zustand';
 
 interface DocumentStore {
   documentsBySession: Record<string, Document[]>;

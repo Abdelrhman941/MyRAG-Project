@@ -29,26 +29,33 @@ export function useReadiness() {
 
   useEffect(() => {
     let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | undefined;
+    let checking = false;
 
     const checkReadiness = async () => {
-      const result = await getReadyStatusAction();
-      if (cancelled) return;
+      if (checking) return;
+      checking = true;
 
-      const status = normalizeStatus(result.status);
-      setState({ status, detail: result.detail });
+      try {
+        const result = await getReadyStatusAction();
+        if (cancelled) return;
 
-      if (status === 'ready' || status === 'error') {
-        if (interval) clearInterval(interval);
+        const status = normalizeStatus(result.status);
+        setState({ status, detail: result.detail });
+
+        if (status === 'ready' || status === 'error') {
+          clearInterval(interval);
+        }
+      } finally {
+        checking = false;
       }
     };
 
+    const interval = setInterval(() => void checkReadiness(), 2000);
     void checkReadiness();
-    interval = setInterval(() => void checkReadiness(), 2000);
 
     return () => {
       cancelled = true;
-      if (interval) clearInterval(interval);
+      clearInterval(interval);
     };
   }, [attempt]);
 

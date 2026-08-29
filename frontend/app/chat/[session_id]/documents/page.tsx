@@ -1,5 +1,6 @@
-import { DocumentManager } from '@/components/document-manager';
+import { DocumentManager } from '@/features/documents/document-manager';
 import { getDocuments } from '@/lib/api';
+import { notFound } from 'next/navigation';
 
 export default async function DocumentsPage({
   params,
@@ -10,12 +11,16 @@ export default async function DocumentsPage({
   const sessionId = resolvedParams.session_id;
   const initialDocuments = await getDocuments(sessionId);
 
+  if (initialDocuments === null) {
+    notFound();
+  }
+
   return (
     <div className="flex flex-col h-full bg-background p-6 lg:p-10 max-w-5xl mx-auto overflow-y-auto">
       <div className="flex items-center gap-4 mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Knowledge Base</h1>
       </div>
-      <DocumentManager initialDocuments={initialDocuments || []} sessionId={sessionId} />
+      <DocumentManager initialDocuments={initialDocuments} sessionId={sessionId} />
     </div>
   );
 }

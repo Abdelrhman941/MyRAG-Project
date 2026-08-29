@@ -66,7 +66,7 @@ export async function streamChatAnswer(
   { signal, onEvent }: StreamChatOptions
 ): Promise<void> {
   const response = await fetch(
-    `${BACKEND_URL}/api/v1/chat/sessions/${sessionId}/messages/stream`,
+    `${BACKEND_URL}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages/stream`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

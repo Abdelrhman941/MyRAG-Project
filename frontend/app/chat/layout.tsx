@@ -1,4 +1,4 @@
-import { AppSidebar } from '@/components/app-sidebar';
+import { AppSidebar } from '@/components/layout/app-sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { getSessions } from '@/lib/api';
 
@@ -7,7 +7,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
 
   return (
     <SidebarProvider>
-      <AppSidebar initialSessions={sessions || []} />
+      <AppSidebar initialSessions={sessions} />
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-background relative">
         <div className="absolute top-3 left-3 z-50">
           <SidebarTrigger />

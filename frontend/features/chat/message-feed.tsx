@@ -1,11 +1,12 @@
 'use client';
 
-import { useDocuments } from '@/hooks/use-documents';
-import { useChatStream } from '@/hooks/use-chat-stream';
+import { useDocuments } from '@/features/documents/use-documents';
 import { useReadiness } from '@/hooks/use-readiness';
+import { useConfig } from '@/lib/config';
 import type { Message } from '@/lib/types';
 import { useMemo, useRef } from 'react';
-import { AgentChat, type AgentMessage } from './ui/agent-chat';
+import { AgentChat, type AgentMessage } from './agent-chat';
+import { useChatStream } from './use-chat-stream';
 
 export function MessageFeed({
   initialMessages,
@@ -16,6 +17,7 @@ export function MessageFeed({
 }) {
   const { messages, phase, isStreaming, send, stop } = useChatStream(initialMessages, sessionId);
 
+  const config = useConfig();
   const { uploadFiles, isUploading } = useDocuments(sessionId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { status: readinessStatus, detail: readinessDetail, retry } = useReadiness();
@@ -40,7 +42,7 @@ export function MessageFeed({
     [messages]
   );
 
-  const handleSend = async (message: { role: 'user'; content: string }) => {
+  const handleSend = (message: { role: 'user'; content: string }) => {
     void send(message.content);
   };
 
@@ -59,7 +61,7 @@ export function MessageFeed({
         className="hidden"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept=".pdf,.txt,.md,.docx"
+        accept={config?.accepted_extensions.join(',')}
       />
 
       {(readinessStatus === 'connecting' || readinessStatus === 'warming') && (

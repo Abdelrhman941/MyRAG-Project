@@ -32,11 +32,11 @@ The application shell is divided into two primary structural areas:
 ## 5. Screen/Component Model
 - **App Shell**: Persistent sidebar with collapsible behavior on small screens.
 - **Chat View**: The default and primary surface. Displays a scrollable conversation log, loading indicators for generation, error states, and a fixed prompt composer at the bottom.
-- **Document View**: A list or clean table layout displaying uploaded documents, their statuses (`uploaded`, `processing`, `ready`, `failed`), and minimal actions (Delete).
+- **Document View**: A list or clean table layout displaying uploaded documents, their statuses (`uploaded`, `processing`, `ready`, `failed`, `deleting`), and minimal actions (Delete).
 - **Prompt Composer**: A clean text input area with an explicit send action, supporting "Enter to send". Styled taking inspiration from the 21st.dev ChatGPT-style prompt input.
 
 ## 6. UX Flows
-1. **First visit**: Brief branded splash, leading directly into a new empty chat session.
+1. **First visit**: Brief branded splash that waits for backend readiness before leading into a chat session.
 2. **Create session**: "New Chat" clears the main area and prepares a fresh session context.
 3. **Upload documents**: User selects multiple files (up to 10). UI shows immediate local placeholder rows with an "uploading/processing" indicator.
 4. **Processing → ready/failed**: UI polls or refreshes to transition document states. Duplicates or oversize files trigger friendly, specific error messages.
@@ -70,7 +70,7 @@ The application shell is divided into two primary structural areas:
 
 ## 10. Document Experience
 - **Multi-file Upload**: Support for selecting multiple files at once.
-- **Status Visibility**: Clear visual distinction between `uploaded` (waiting), `processing` (active), `ready` (success), and `failed` (error).
+- **Status Visibility**: Clear visual distinction between `uploaded` (waiting), `processing` (active), `ready` (success), `failed` (error), and `deleting` (pending removal).
 - **Error Handling**: Rate limits (429) show "You're uploading too fast — try again later". Deduplication conflicts (409) show a friendly "Document already exists" notice.
 - **Actions**: Simple delete action per document. Refresh/update capability to track background ingestion.
 
@@ -102,17 +102,13 @@ The application shell is divided into two primary structural areas:
 - **Caching**: Reuse server data across navigations where appropriate.
 - **Optimistic UI**: Use optimistic updates cautiously, only where backend correctness guarantees it (e.g., deleting a document).
 - **Feedback**: Immediate visual feedback for all user actions.
-- **State Management**: Rely on native React and Next.js capabilities. Do not introduce global state libraries (Zustand, Redux) unless absolutely mandated by architectural complexity.
+- **State Management**: Use the existing Zustand store for session-scoped document state and React state for component-local interaction state. Do not introduce another client-state library without a demonstrated need.
 
 ## 16. Current Backend Constraints
-**CRITICAL ARCHITECTURE NOTE:**
-The current backend retrieval contract (`POST /api/v1/chat/sessions/{session_id}/messages` and the Qdrant adapter) searches **all** `ready` documents globally. It does not currently scope retrieval by `session_id`.
-
-**BLOCKING GAP:**
-Stage 08 frontend implementation is explicitly **PAUSED**. The UI cannot and will not be built with a misleading global-document UX. The backend contract (database, APIs, and Qdrant filtering) must be refactored to support strict session-scoping before frontend development proceeds.
+The backend retrieval and document APIs are session-scoped. The frontend must
+preserve that invariant in every route, mutation, and visible list.
 
 ## 17. Future/Deferred Capabilities
-- Streaming responses (SSE/WebSockets).
 - Semantic long-term memory.
 - Advanced document parsing/management features.
 - Authentication and multi-user boundaries.
