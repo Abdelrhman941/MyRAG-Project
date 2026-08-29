@@ -28,9 +28,9 @@ are Client Components.
 
 - `lib/api.ts` is the server-side FastAPI client and holds server actions for
   session and document mutations.
-- `lib/backend-url.ts` centralizes the backend origin for server-rendered
-  requests and route handlers. Prefer `BACKEND_API_URL`; the public API URL is
-  a fallback for local development.
+- `lib/backend-url.ts` resolves the private server-side backend origin for
+  Server Components, Server Actions, and route handlers. `lib/public-backend-url.ts`
+  resolves the browser-safe SSE origin from `NEXT_PUBLIC_API_URL`.
 - `app/api/upload/route.ts` is the internal multipart upload proxy. Browser
   code sends files only to this route.
 - `lib/api/stream.ts` is the sole browser SSE client. It uses

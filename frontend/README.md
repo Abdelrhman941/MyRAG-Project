@@ -36,7 +36,8 @@ neither backend URL is configured.
 - `components/layout/` and `components/providers/` hold app-shell-only UI and
   root providers.
 - `components/ui/` contains reusable Base UI/shadcn-style primitives only.
-- `lib/` contains configuration, typed API access, shared types, and utilities.
+- `lib/` contains configuration, typed API access, shared types, utilities,
+  and distinct private/public backend URL resolvers.
 
 ## Verification
 

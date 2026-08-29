@@ -18,15 +18,15 @@ function StatusStep({ step }: { step: Step }) {
       <span
         className={`flex size-5 items-center justify-center rounded-full border ${
           step.complete
-            ? 'border-emerald-400/40 bg-emerald-400/15 text-emerald-300'
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
             : step.active
-              ? 'border-neutral-400 bg-neutral-100 text-neutral-900'
-              : 'border-neutral-700 text-neutral-600'
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-border text-muted-foreground'
         }`}
       >
         {step.complete ? <Check className="size-3" /> : <Circle className="size-2 fill-current" />}
       </span>
-      <span className={step.active || step.complete ? 'text-neutral-100' : 'text-neutral-500'}>
+      <span className={step.active || step.complete ? 'text-foreground' : 'text-muted-foreground'}>
         {step.label}
       </span>
     </div>
@@ -73,31 +73,31 @@ export function SplashScreen() {
 
   return (
     <main
-      className={`flex min-h-screen items-center justify-center bg-[#171717] px-6 text-neutral-100 transition-opacity duration-500 ${
+      className={`flex min-h-screen items-center justify-center bg-background px-6 text-foreground transition-opacity duration-500 ${
         transitioning ? 'opacity-0' : 'opacity-100'
       }`}
     >
       <div className="w-full max-w-sm animate-in fade-in zoom-in-95 duration-700">
-        <div className="rounded-3xl border border-white/10 bg-[#202020] p-8 shadow-2xl shadow-black/20">
+        <div className="rounded-3xl border border-border bg-card p-8 shadow-2xl shadow-black/10">
           <div className="mb-10 flex items-center gap-4">
-            <div className="flex size-16 items-center justify-center rounded-2xl bg-neutral-100 text-3xl font-bold text-neutral-900 shadow-lg shadow-white/5">
+            <div className="flex size-16 items-center justify-center rounded-2xl bg-primary text-3xl font-bold text-primary-foreground shadow-lg shadow-primary/10">
               R
             </div>
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
                 {config?.app_name || 'RAG Assistant'}
               </h1>
-              <p className="mt-1 text-sm text-neutral-400">Chat with your documents</p>
+              <p className="mt-1 text-sm text-muted-foreground">Chat with your documents</p>
             </div>
           </div>
 
           {isError ? (
-            <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4">
+            <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-4">
               <div className="flex items-start gap-3">
-                <TriangleAlert className="mt-0.5 size-5 shrink-0 text-red-300" />
+                <TriangleAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
                 <div>
-                  <p className="font-medium text-red-100">Unable to reach the server</p>
-                  <p className="mt-1 text-sm leading-5 text-red-200/70">
+                  <p className="font-medium text-foreground">Unable to reach the server</p>
+                  <p className="mt-1 text-sm leading-5 text-muted-foreground">
                     {detail || 'Please ensure the backend server is running.'}
                   </p>
                 </div>
@@ -105,7 +105,7 @@ export function SplashScreen() {
               <button
                 type="button"
                 onClick={retry}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-950 transition-colors hover:bg-white"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 <RefreshCw className="size-3.5" />
                 Retry
@@ -117,8 +117,8 @@ export function SplashScreen() {
                 <StatusStep key={step.label} step={step} />
               ))}
               {isQdrantStarting && (
-                <div className="mt-5 flex items-center gap-2 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-sm text-neutral-300 animate-in fade-in duration-300">
-                  <Database className="size-4 text-neutral-400" />
+                <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground animate-in fade-in duration-300">
+                  <Database className="size-4" />
                   Search engine is starting…
                 </div>
               )}

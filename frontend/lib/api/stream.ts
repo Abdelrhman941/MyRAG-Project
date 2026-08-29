@@ -1,6 +1,5 @@
 import type { SourceCitation } from '@/lib/types';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+import { getPublicBackendUrl } from '@/lib/public-backend-url';
 
 export type ChatStreamEvent =
   | { type: 'sources'; sources: SourceCitation[] }
@@ -66,7 +65,7 @@ export async function streamChatAnswer(
   { signal, onEvent }: StreamChatOptions
 ): Promise<void> {
   const response = await fetch(
-    `${BACKEND_URL}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages/stream`,
+    `${getPublicBackendUrl()}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages/stream`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
