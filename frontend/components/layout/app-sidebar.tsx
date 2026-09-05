@@ -294,7 +294,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
               src="/images/logos/nova-text.webp"
               alt="Nova"
               fill
-              className="object-contain dark:invert"
+              className="object-contain brightness-0 dark:invert"
             />
           </div>
         </div>

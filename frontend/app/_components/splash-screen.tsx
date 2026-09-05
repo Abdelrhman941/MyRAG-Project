@@ -3,7 +3,6 @@
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useReadiness } from '@/hooks/use-readiness';
-import Image from 'next/image';
 
 export function SplashScreen() {
   const { status } = useReadiness();
@@ -40,15 +39,6 @@ export function SplashScreen() {
       style={{ opacity }}
     >
       <div className="flex flex-col items-center gap-6">
-        <div className="relative h-12 w-32">
-          <Image
-            src="/images/logos/nova-text.webp"
-            alt="Nova Logo"
-            fill
-            className="object-contain dark:invert"
-            priority
-          />
-        </div>
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           <p className="text-sm text-muted-foreground animate-pulse">{text}</p>
