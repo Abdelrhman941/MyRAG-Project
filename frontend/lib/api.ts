@@ -120,27 +120,22 @@ export async function getDocuments(sessionId: string): Promise<Document[] | null
   }
 }
 
+export async function createSession(): Promise<Session> {
+  return apiFetch<Session>('/api/v1/chat/sessions', {
+    method: 'POST',
+  });
+}
+
 export async function createSessionAction() {
   let session;
   try {
-    session = await apiFetch<Session>('/api/v1/chat/sessions', {
-      method: 'POST',
-    });
+    session = await createSession();
   } catch (e) {
     console.error(e);
     return;
   }
   revalidatePath('/chat');
   redirect(`/chat/${session.id}`);
-}
-
-export async function bootstrapSessionAction() {
-  const sessions = await getSessions();
-  if (sessions && sessions.length > 0) {
-    redirect(`/chat/${sessions[0].id}`);
-  } else {
-    await createSessionAction();
-  }
 }
 
 export async function deleteSessionAction(

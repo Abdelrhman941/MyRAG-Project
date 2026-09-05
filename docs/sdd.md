@@ -177,8 +177,6 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - SSE Streaming End-to-End (Streaming backend generation to Next.js client, eliminating rag-phase polling and HTTP timeouts)
 - ARQ Background Ingestion (Redis-backed ingestion queues, exponential backoff retries, dedicated worker processes, and automatic recovery sweep on boot).
 
-**Not yet implemented** — see [progress/roadmap.md](progress/roadmap.md).
-
 ---
 
 ## 10. Known Issues / Risks

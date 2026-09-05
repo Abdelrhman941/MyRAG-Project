@@ -9,9 +9,9 @@ back-up: back-down
 	@echo "==> Backend starting..."
 	@cd backend && $(MAKE) run
 
-front-up: front-down
+front-up:
 	@echo "==> Frontend starting..."
-	@cd frontend && $(MAKE) run
+	@cd frontend && rm -rf .next && pnpm build && pnpm start
 
 # ------------------------------------------------------------------------------
 # Stop Commands (Kill process using port 8000 for backend & 3000 for frontend)

@@ -36,7 +36,7 @@ The application shell is divided into two primary structural areas:
 - **Prompt Composer**: A clean text input area with an explicit send action, supporting "Enter to send". Styled taking inspiration from the 21st.dev ChatGPT-style prompt input.
 
 ## 6. UX Flows
-1. **First visit**: Brief branded splash that waits for backend readiness before leading into a chat session.
+1. **First visit**: Bootstraps a session immediately on the server before leading into a chat session.
 2. **Create session**: "New Chat" clears the main area and prepares a fresh session context.
 3. **Upload documents**: User selects multiple files (up to 10). UI shows immediate local placeholder rows with an "uploading/processing" indicator.
 4. **Processing → ready/failed**: UI polls or refreshes to transition document states. Duplicates or oversize files trigger friendly, specific error messages.
@@ -55,7 +55,7 @@ The application shell is divided into two primary structural areas:
 - This is not optional behavior; the UI must never present a "global" document list.
 
 ## 8. Loading/Skeleton Strategy
-- **First Visit / Initial App Load**: A brief, minimal, premium branded splash state. No full-screen animated extravaganzas.
+- **First Visit / Initial App Load**: Immediate server redirect to a new or existing chat session.
 - **Subsequent Refresh / Navigation Loads**:
   - Use exact-dimension skeleton UI elements instead of generic spinners.
   - Skeletons must preserve the final layout to prevent Cumulative Layout Shift (CLS).

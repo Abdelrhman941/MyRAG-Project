@@ -8,9 +8,7 @@ frontend architecture changes.
 
 - `app/layout.tsx` loads server configuration, establishes metadata and the
   theme/config providers.
-- `app/page.tsx` renders its route-owned client splash screen from
-  `app/_components/`. The splash polls `/readyz` through a server action and
-  only bootstraps a session after the backend is ready.
+- `app/page.tsx` bootstraps a new session on the server and redirects.
 - `app/chat/layout.tsx` is the application shell. It loads sessions on the
   server and provides the sidebar.
 - `app/chat/[session_id]/page.tsx` loads message history and renders the client
@@ -21,7 +19,7 @@ frontend architecture changes.
   consistent failure and not-found views.
 
 Pages and layouts remain Server Components where possible. Interactive
-components—the splash, sidebar, document manager, message feed, and composer—
+components—the sidebar, document manager, message feed, and composer—
 are Client Components.
 
 ## Data and state
@@ -42,8 +40,8 @@ are Client Components.
   `processing`.
 - `features/chat/useChatStream` owns optimistic messages, one `AbortController` per answer,
   SSE-derived phase, and partial-answer preservation after Stop.
-- `useReadiness` owns the fixed two-second readiness polling used by both the
-  splash screen and chat warm-up state.
+- `useReadiness` owns the fixed two-second readiness polling used by the
+  chat warm-up state.
 
 ## API mapping
 
