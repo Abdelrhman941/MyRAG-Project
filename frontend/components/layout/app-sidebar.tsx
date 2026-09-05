@@ -11,14 +11,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -88,16 +86,16 @@ function WorkspaceNavigation({
 }) {
   return (
     <SidebarGroup className="p-0">
-      <SidebarGroupLabel className="gap-2 px-2">
-        <Files className="size-3.5" />
-        Current workspace
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
+      <div className="px-3 pt-4 pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/60">
+        Workspace
+      </div>
+      <SidebarGroupContent className="px-2">
+        <SidebarMenu className="gap-1">
           <SidebarMenuItem>
             <SidebarMenuButton
               render={<Link href={`/chat/${activeSessionId}`} prefetch={true} />}
               isActive={pathname === `/chat/${activeSessionId}`}
+              className="rounded-lg h-10 transition-colors hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent/80"
             >
               <MessageSquare className="size-4" />
               <span>Chat</span>
@@ -107,6 +105,7 @@ function WorkspaceNavigation({
             <SidebarMenuButton
               render={<Link href={`/chat/${activeSessionId}/documents`} prefetch={true} />}
               isActive={pathname === `/chat/${activeSessionId}/documents`}
+              className="rounded-lg h-10 transition-colors hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent/80"
             >
               <Files className="size-4" />
               <span>Knowledge Base</span>
@@ -114,12 +113,12 @@ function WorkspaceNavigation({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <div className="mt-1 max-h-52 overflow-y-auto px-2 pb-1 custom-scrollbar">
+        <div className="mt-2 max-h-52 overflow-y-auto pb-1 custom-scrollbar">
           {documents.length ? (
             documents.map((document) => (
               <div
                 key={document.id}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/70"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/30"
               >
                 <StatusDot status={document.status} />
                 <FileTypeIcon document={document} />
@@ -129,7 +128,9 @@ function WorkspaceNavigation({
               </div>
             ))
           ) : (
-            <p className="px-2 py-2 text-xs text-muted-foreground">No documents yet</p>
+            <div className="mx-1 my-1 px-3 py-3 rounded-lg border border-dashed border-sidebar-border/70 flex items-center justify-center">
+              <p className="text-[11px] text-muted-foreground/70">No documents yet</p>
+            </div>
           )}
         </div>
       </SidebarGroupContent>
@@ -152,23 +153,24 @@ function ChatList({
 }) {
   return (
     <SidebarGroup className="p-0 flex-1 overflow-hidden flex flex-col">
-      <SidebarGroupLabel className="gap-2 px-2 shrink-0">
-        <MessageSquare className="size-3.5" />
+      <div className="px-3 pt-3 pb-2 shrink-0 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/60">
         Chats
-      </SidebarGroupLabel>
-      <SidebarGroupContent className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2 -mx-2">
-        <SidebarMenu>
+      </div>
+      <SidebarGroupContent className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2">
+        <SidebarMenu className="gap-1.5">
           {sessions.length ? (
             sessions.map((session) => (
               <SidebarMenuItem key={session.id} className="group relative">
                 <SidebarMenuButton
                   render={<Link href={`/chat/${session.id}`} prefetch={true} />}
                   isActive={activeSessionId === session.id}
-                  className="h-auto min-h-12 py-2.5 pr-10"
+                  className="h-auto min-h-13 py-2.5 pr-10 rounded-xl transition-all border border-transparent hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent/80 data-[active=true]:border-sidebar-border/50 data-[active=true]:shadow-sm"
                 >
                   <div className="min-w-0 flex-1">
-                    <span className="block truncate">{session.title || 'New Chat'}</span>
-                    <span className="block text-[11px] text-muted-foreground">
+                    <span className="block truncate text-[13px] font-medium leading-snug">
+                      {session.title || 'New Chat'}
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground mt-0.5">
                       {relativeDate(session.updated_at || session.created_at)}
                     </span>
                   </div>
@@ -178,7 +180,7 @@ function ChatList({
                   onClick={() => onDelete(session.id)}
                   disabled={isPending}
                   aria-label="Delete chat"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
                 >
                   {deletingId === session.id ? (
                     <Loader2 className="size-3.5 animate-spin" />
@@ -276,7 +278,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
 
   return (
     <Sidebar className="border-sidebar-border">
-      <SidebarHeader className="gap-4 p-4">
+      <SidebarHeader className="gap-4 p-4 pb-2">
         <div
           className="flex h-10 items-center gap-2 px-1"
           role="img"
@@ -304,7 +306,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
               <Button
                 onClick={() => startTransition(() => createSessionAction())}
                 disabled={isPending}
-                className="w-full justify-start gap-2"
+                className="w-full justify-start gap-2 h-10 rounded-xl mt-1"
               >
                 <Plus className="size-4" />
                 New Chat
@@ -315,9 +317,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
         </Tooltip>
       </SidebarHeader>
 
-      <Separator />
-
-      <SidebarContent className="px-2 py-3 overflow-hidden flex flex-col gap-0">
+      <SidebarContent className="px-2 pb-2 overflow-hidden flex flex-col gap-2 mt-2">
         <div className="shrink-0 flex flex-col">
           {activeSessionId && (
             <WorkspaceNavigation
@@ -326,7 +326,6 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
               documents={documents}
             />
           )}
-          <Separator className="my-3" />
         </div>
         <ChatList
           sessions={initialSessions}
@@ -337,8 +336,8 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
         />
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border bg-sidebar-accent/40 p-3">
-        <div className="flex items-center justify-between">
+      <SidebarFooter className="p-3 pt-0">
+        <div className="flex items-center gap-1 rounded-xl p-1 bg-sidebar-accent/30 border border-sidebar-border/50">
           <Tooltip>
             <TooltipTrigger
               render={
@@ -347,7 +346,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
                   onClick={toggleTheme}
                   disabled={isThemeTransitioning}
                   aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-                  className="rounded-md p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-50"
+                  className="flex-1 flex justify-center items-center rounded-lg p-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-50 transition-colors"
                 />
               }
             >
@@ -356,6 +355,9 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
             </TooltipTrigger>
             <TooltipContent>Toggle theme</TooltipContent>
           </Tooltip>
+
+          <div className="w-px h-5 bg-sidebar-border/50 shrink-0 mx-0.5" />
+
           <Tooltip>
             <TooltipTrigger
               render={
@@ -363,7 +365,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
                   type="button"
                   onClick={() => setIsDeleteAllOpen(true)}
                   disabled={!initialSessions.length || isPending}
-                  className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                  className="flex-1 flex justify-center items-center rounded-lg p-2.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 transition-colors"
                 />
               }
             >
