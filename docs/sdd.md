@@ -1,11 +1,10 @@
 # Software Design Document (SDD) — RAG System
 
 > **This document is the Single Source of Truth (SST).**
-> If code and this document disagree, the code is wrong — fix the code or
-> explicitly update this document in the same change.
-> To change a feature's behavior, **edit the spec first**, then let the agent
-> re-implement from the spec. This eliminates hallucination, maintains context,
-> and keeps development velocity high (you review and verify; the agent implements).
+> If the implementation disagrees with this document, do not silently choose one.
+> Determine which represents the intended behavior, then update the implementation
+> and/or this document in the same change so they remain consistent.
+> To change a feature's behavior, **edit the spec first**, then implement from the spec.
 
 Parent: [00-index.md](00-index.md) · Rules: [../AGENTS.md](../AGENTS.md)
 
@@ -80,7 +79,7 @@ Full detail: [diagrams/component-design.md](diagrams/component-design.md).
 **Ingestion lifecycle:**
 `Upload → validate (type/size/rate) → stream to temp + SHA-256 → dedup check →
 DB record (status=uploaded) → move to final path → enqueue ARQ job → worker picks up → parse → chunk →
-embed (BGE-M3 dense+sparse, CPU, max_length=CHUNK_SIZE_TOKENS, fp16=True, ONNX supported) → upsert Qdrant → status=ready (or failed)`
+embed (BGE-M3 dense+sparse on CPU, bounded by CHUNK_SIZE_TOKENS) → upsert Qdrant → status=ready (or failed)`
 
 ---
 

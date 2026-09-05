@@ -74,7 +74,7 @@ flowchart LR
   native Query API — **never** reimplemented in Python.
 - **Backend ↔ LLM:** `httpx.AsyncClient` against an OpenAI-compatible
   `/chat/completions` endpoint; API key from `Settings`, never in code.
-- **Background work:** FastAPI `BackgroundTasks` for ingestion (MVP). No Celery/Redis.
+- **Background work:** FastAPI handles request/response orchestration; ingestion jobs are enqueued to ARQ and processed by dedicated workers through Redis. Do not use FastAPI `BackgroundTasks` for ingestion.
 
 ## Modularity Rules
 

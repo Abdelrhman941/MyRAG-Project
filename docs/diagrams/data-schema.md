@@ -8,7 +8,6 @@ Parent: [../00-index.md](../00-index.md) · Spec: [../sdd.md](../sdd.md)
 
 ```mermaid
 erDiagram
-    DOCUMENTS ||--o{ CHAT_MESSAGES : "referenced by (source citations)"
     CHAT_SESSIONS ||--o{ CHAT_MESSAGES : contains
 
     DOCUMENTS {
@@ -33,9 +32,13 @@ erDiagram
         uuid session_id FK "✅ → chat_sessions.id · indexed · cascade delete"
         enum role "✅ user · assistant"
         text content "✅"
+        json sources "✅ nullable · source-citation metadata"
         datetime created_at "✅ · indexed"
     }
 ```
+
+> **Note:** `chat_messages.sources` stores source-citation metadata (document name, chunk index, etc.) as a JSON column.
+> There is **no relational foreign key** between `chat_messages` and `documents` — do not generate a migration or repository logic based on a FK that does not exist.
 
 **Constraint notes**
 - `documents.content_hash` UNIQUE is enforced at the DB level — dedup correctness
