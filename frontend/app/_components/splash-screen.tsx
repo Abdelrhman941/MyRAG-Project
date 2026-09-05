@@ -3,10 +3,11 @@
 import { useReadiness } from '@/hooks/use-readiness';
 import { bootstrapSessionAction } from '@/lib/api';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
+import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 
 const MIN_SPLASH_DURATION_MS = 900;
-const SPLASH_EXIT_DURATION_MS = 700;
+const SPLASH_EXIT_DURATION_MS = 300;
 
 export function SplashScreen() {
   const { status, detail, retry } = useReadiness();
@@ -44,38 +45,46 @@ export function SplashScreen() {
   const isError = status === 'error';
   return (
     <main className={`splash-screen ${transitioning ? 'splash-screen--exiting' : ''}`}>
-      <div className="splash-loader" role="img" aria-label="Loading">
-        <div className="splash-loader__cube" aria-hidden="true">
-          {Array.from({ length: 6 }, (_, index) => (
-            <span key={index} className={`splash-loader__face splash-loader__face--${index + 1}`} />
-          ))}
+      <div className="flex flex-col items-center animate-in fade-in duration-400 motion-reduce:animate-none">
+        <Image
+          src="/images/logos/nova.webp"
+          alt="Nova Logo"
+          width={64}
+          height={64}
+          className="h-16 w-auto object-contain"
+          priority
+        />
+
+        <div className="mt-8 h-[2px] w-40 overflow-hidden rounded-full bg-white/10">
+          <div
+            className={`h-full bg-white/60 transition-all ${
+              status === 'ready'
+                ? 'w-full'
+                : 'w-full animate-indeterminate motion-reduce:animate-none'
+            }`}
+          />
         </div>
-        <div className="splash-loader__particles" aria-hidden="true">
-          {Array.from({ length: 8 }, (_, index) => (
-            <span key={index} className="splash-loader__particle" />
-          ))}
-        </div>
+
+        {!isError && (
+          <p
+            key={status}
+            className="mt-4 text-[13px] text-white/40 animate-in fade-in duration-500 motion-reduce:animate-none"
+          >
+            {status === 'warming' && 'Loading AI model — first boot can take a minute…'}
+            {status === 'qdrant_not_ready' && 'Search engine is starting…'}
+            {status === 'connecting' && 'Connecting to server…'}
+            {status === 'ready' && 'Ready'}
+          </p>
+        )}
       </div>
 
-      {!isError && (
-        <p
-          key={status}
-          className="mt-6 text-sm text-white/50 animate-in fade-in duration-500"
-        >
-          {status === 'warming' && 'Loading AI model — first boot can take a minute…'}
-          {status === 'qdrant_not_ready' && 'Search engine is starting…'}
-          {status === 'connecting' && 'Connecting to server…'}
-          {status === 'ready' && 'Ready'}
-        </p>
-      )}
-
       {isError && (
-        <div className="splash-error" role="alert">
+        <div className="mt-8 w-full max-w-[22rem] rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm" role="alert">
           <div className="flex items-start gap-3">
             <TriangleAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
             <div>
-              <p className="font-medium text-white">Unable to reach the server</p>
-              <p className="mt-1 text-sm leading-5 text-white/60">
+              <p className="font-medium">Unable to reach the server</p>
+              <p className="mt-1 text-sm leading-5 text-muted-foreground">
                 {detail || 'Please ensure the backend server is running.'}
               </p>
             </div>
@@ -83,7 +92,7 @@ export function SplashScreen() {
           <button
             type="button"
             onClick={retry}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition-colors hover:bg-white/85"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <RefreshCw className="size-3.5" />
             Retry
