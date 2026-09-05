@@ -89,6 +89,7 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
   const removeOptimistic = useDocumentStore((state) => state.removeOptimistic);
   const markDeleting = useDocumentStore((state) => state.markDeleting);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -171,6 +172,7 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
     const temporaryIds = optimisticDocuments.map((document) => document.id);
 
     setIsUploading(true);
+    setUploadingCount(files.length);
     applyUploadOptimistic(sessionId, optimisticDocuments);
     ensurePolling(sessionId);
 
@@ -224,14 +226,17 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
 
       if (failedTemporaryIds.length) {
         revertUpload(sessionId, failedTemporaryIds);
-        const failedResult = results.find((result) => !result.ok || !result.document);
-        toast.error(failedResult?.error?.message || 'Upload failed. Please try again.');
+        const failedResults = results.filter((result) => !result.ok || !result.document);
+        const count = failedResults.length;
+        const messages = failedResults.map(r => `${r.filename} (${r.error?.message || 'unknown error'})`);
+        toast.error(`${count} file${count === 1 ? '' : 's'} failed: ${messages.join(', ')}`);
       }
     } catch {
       revertUpload(sessionId, temporaryIds);
       toast.error('Upload failed. Please try again.');
     } finally {
       setIsUploading(false);
+      setUploadingCount(0);
     }
   };
 
@@ -271,5 +276,5 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
     });
   };
 
-  return { documents, isUploading, isPending, uploadFiles, handleDelete, handleRetry, deleteDocument };
+  return { documents, isUploading, uploadingCount, isPending, uploadFiles, handleDelete, handleRetry, deleteDocument };
 }

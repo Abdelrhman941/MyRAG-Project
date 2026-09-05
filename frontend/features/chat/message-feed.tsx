@@ -18,7 +18,7 @@ export function MessageFeed({
   const { messages, phase, isStreaming, send, stop } = useChatStream(initialMessages, sessionId);
 
   const config = useConfig();
-  const { documents, uploadFiles, isUploading } = useDocuments(sessionId);
+  const { documents, uploadFiles, isUploading, uploadingCount } = useDocuments(sessionId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { status: readinessStatus, detail: readinessDetail, retry } = useReadiness();
   const modelReady = readinessStatus === 'ready';
@@ -107,6 +107,7 @@ export function MessageFeed({
         attachments={{
           onAttach: () => fileInputRef.current?.click(),
           isUploading,
+          uploadingCount,
         }}
       />
     </div>
