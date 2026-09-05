@@ -113,7 +113,10 @@ class IngestionService:
 
                 try:
                     dense, sparse = await asyncio.to_thread(
-                        model.encode_batch, texts, self.settings.EMBEDDING_BATCH_SIZE
+                        model.encode_batch,
+                        texts,
+                        self.settings.EMBEDDING_BATCH_SIZE,
+                        self.settings.RETRIEVAL_HYBRID,
                     )
                 except Exception as e:
                     logger.exception(

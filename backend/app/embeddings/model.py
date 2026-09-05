@@ -22,20 +22,38 @@ class EmbeddingModel:
         if model_name != "BAAI/bge-m3":
             raise ValueError(f"Only BAAI/bge-m3 is supported, got {model_name}")
 
+        from ..core import get_settings
+
+        settings = get_settings()
+
         pinned_sha = "5617a9f61b028005a4858fdac845db406aefb181"
-        allow = ["*.json", "*.txt", "*.model", "*.bin", "*.pt", "*.md"]
+        allow = [
+            "*.json",
+            "*.txt",
+            "*.model",
+            "*.bin",
+            "*.pt",
+            "*.md",
+            "*.onnx",
+            "*.pb",
+        ]
         model_path = snapshot_download(
             repo_id=model_name,
             revision=pinned_sha,
             allow_patterns=allow,
-            ignore_patterns=["*onnx*"],
+            # removed "*onnx*" from ignore_patterns to allow ONNX weights to load
         )
 
-        self._model = BGEM3FlagModel(model_path, use_fp16=False, device="cpu")
+        self._model = BGEM3FlagModel(model_path, use_fp16=True, device="cpu")
+        self._max_length = settings.CHUNK_SIZE_TOKENS
+
+        # Warmup
+        self._model.encode(["warmup"], batch_size=1, max_length=self._max_length)
+
         logger.info(f"Embedding model '{model_name}' loaded.")
 
     def encode_batch(
-        self, texts: list[str], batch_size: int = 16
+        self, texts: list[str], batch_size: int = 16, return_sparse: bool = True
     ) -> tuple[list[list[float]], list[dict[int, float]]]:
         if not texts:
             return [], []
@@ -43,20 +61,25 @@ class EmbeddingModel:
         output = self._model.encode(
             texts,
             batch_size=batch_size,
-            max_length=8192,
+            max_length=self._max_length,
             return_dense=True,
-            return_sparse=True,
+            return_sparse=return_sparse,
             return_colbert_vecs=False,
         )
         dense_vecs = output.get("dense_vecs")
-        lexical_weights = output.get("lexical_weights")
-        if dense_vecs is None or lexical_weights is None:
+        if dense_vecs is None:
             raise ValueError("BGEM3FlagModel failed to return required outputs.")
+
         results_dense = [vec.tolist() for vec in dense_vecs]
         results_sparse = []
-        for lex_weight in lexical_weights:
-            sparse = {int(k): float(v) for k, v in lex_weight.items()}
-            results_sparse.append(sparse)
+
+        if return_sparse:
+            lexical_weights = output.get("lexical_weights")
+            if lexical_weights is not None:
+                for lex_weight in lexical_weights:
+                    sparse = {int(k): float(v) for k, v in lex_weight.items()}
+                    results_sparse.append(sparse)
+
         return results_dense, results_sparse
 
 

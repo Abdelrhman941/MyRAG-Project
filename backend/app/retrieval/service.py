@@ -27,10 +27,12 @@ class RetrievalService:
         # Embed query
         model = get_embedding_model(self.settings.EMBEDDING_MODEL)
 
-        dense, sparse = await asyncio.to_thread(model.encode_batch, [query], 1)
+        dense, sparse = await asyncio.to_thread(
+            model.encode_batch, [query], 1, self.settings.RETRIEVAL_HYBRID
+        )
 
         query_dense = dense[0]
-        query_sparse = sparse[0] if self.settings.RETRIEVAL_HYBRID else None
+        query_sparse = sparse[0] if self.settings.RETRIEVAL_HYBRID and sparse else None
 
         # Query vector store
         try:
