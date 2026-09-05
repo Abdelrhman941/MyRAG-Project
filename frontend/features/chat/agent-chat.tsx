@@ -2,7 +2,7 @@
 
 import type { SourceCitation } from '@/lib/types';
 import { cn, parseUtcDate } from '@/lib/utils';
-import { ArrowUp, Paperclip, Square, Check, Copy } from 'lucide-react';
+import { ArrowUp, Paperclip, Square, Check, Copy, ChevronDown } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type ComponentPropsWithoutRef, type ElementType } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -52,10 +52,46 @@ const StopIcon = () => <Square className="w-3 h-3 fill-current" />;
 const PaperclipIcon = () => <Paperclip className="w-4.5 h-4.5" />;
 
 function UserBubble({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (el) {
+      // Check if actual content height exceeds 200px threshold
+      setIsOverflowing(el.scrollHeight > 200);
+    }
+  }, [text]);
+
   return (
     <div className="flex justify-end">
-      <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-neutral-100 dark:bg-[#303030] text-[15px] text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap wrap-break-word border dark:border-transparent">
-        {text}
+      <div className="relative max-w-[80%] rounded-2xl rounded-br-sm bg-neutral-100 dark:bg-[#303030] text-[15px] text-neutral-900 dark:text-neutral-100 border dark:border-transparent overflow-hidden">
+        <div
+          ref={contentRef}
+          className={cn(
+            'px-4 pt-2.5 whitespace-pre-wrap wrap-break-word transition-[max-height,padding] duration-500 ease-in-out',
+            expanded ? 'max-h-[3000px] pb-10' : 'max-h-[200px] pb-2.5 overflow-hidden'
+          )}
+        >
+          {text}
+        </div>
+
+        {isOverflowing && !expanded && (
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-neutral-100 dark:from-[#303030] to-transparent pointer-events-none rounded-b-2xl" />
+        )}
+
+        {isOverflowing && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="absolute bottom-2 right-2 flex items-center justify-center size-6 rounded-full bg-black/10 dark:bg-black/40 hover:bg-black/20 dark:hover:bg-black/60 text-neutral-700 dark:text-neutral-300 transition-all z-10"
+            aria-label={expanded ? 'Collapse message' : 'Expand message'}
+          >
+            <ChevronDown
+              className={cn('size-4 transition-transform duration-300', expanded && 'rotate-180')}
+            />
+          </button>
+        )}
       </div>
     </div>
   );
