@@ -154,11 +154,8 @@ function ThinkingBubble({ ragPhase = 'idle' }: { ragPhase?: string }) {
 
   return (
     <div className="flex justify-start">
-      <div className="relative text-[14px] flex items-center gap-3 px-1">
-        <div className="relative flex items-center justify-center w-2 h-2">
-          <div className="absolute inset-0 rounded-full bg-neutral-400/50 dark:bg-neutral-500/50 animate-ping animation-duration-[2.5s]" />
-          <div className="relative w-1 h-1 rounded-full bg-neutral-500 dark:bg-neutral-400" />
-        </div>
+      <div className="relative text-[14px] flex items-center gap-2 px-1">
+        <span className="font-mono text-neutral-500 animate-cursor-blink text-lg leading-none -translate-y-[1px]">|</span>
         <div className="relative w-57.5 h-5">
           <div
             key={text}
