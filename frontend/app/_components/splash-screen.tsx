@@ -6,7 +6,7 @@ import { useReadiness } from '@/hooks/use-readiness';
 import Image from 'next/image';
 
 export function SplashScreen() {
-  const { isReady } = useReadiness();
+  const { status } = useReadiness();
   const [text, setText] = useState('Initializing...');
   const [opacity, setOpacity] = useState(1);
   const [hidden, setHidden] = useState(false);
@@ -22,12 +22,12 @@ export function SplashScreen() {
   }, []);
 
   useEffect(() => {
-    if (isReady) {
+    if (status === 'ready') {
       setOpacity(0);
       const hideTimer = setTimeout(() => setHidden(true), 1000); // Wait for fade out
       return () => clearTimeout(hideTimer);
     }
-  }, [isReady]);
+  }, [status]);
 
   if (hidden) return null;
 
