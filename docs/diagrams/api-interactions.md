@@ -62,9 +62,12 @@ sequenceDiagram
     LLM--xCS: timeout/5xx → 502 llm_provider_error
     LLM-->>CS: answer text (streaming)
     CS->>SR: persist user + assistant messages
-    opt every K turns
-        CS->>LLM: summarize transcript (background)
+    opt every K turns (FastAPI BackgroundTask, post-response)
+        CS->>LLM: summarize transcript
         CS->>SR: update session summary
+    end
+    opt first assistant message, no title yet (FastAPI BackgroundTask, post-response)
+        CS->>SR: generate + persist session title
     end
     CS-->>API: { answer, sources }
     API-->>C: 200 (streaming SSE)
