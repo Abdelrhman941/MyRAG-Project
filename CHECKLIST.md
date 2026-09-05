@@ -141,14 +141,14 @@
 
 ## Final Acceptance
 
-- [ ] CHECKLIST.md all boxes checked with verification evidence
-- [ ] Backend: ruff clean, Alembic migration applies AND downgrades
-- [ ] Frontend: pnpm build + pnpm lint clean
-- [ ] Citations visible on old messages after refresh
-- [ ] Timestamps correct (never GMT-shifted)
-- [ ] Upload doesn't balloon Next server memory
-- [ ] Warm-boot splash ≲1.5s; cold boot shows phase text
-- [ ] Sidebar session title auto-updates after first Q&A
-- [ ] Failed doc → Retry → re-ingests; ready doc → 409 toast
-- [ ] Copy, timestamps, code blocks, prompts, shortcuts, sizes, prefetch verified
-- [ ] SDD updated for every contract change
+- [x] CHECKLIST.md all boxes checked with verification evidence
+- [x] Backend: ruff clean, Alembic migration applies AND downgrades
+- [x] Frontend: pnpm build + pnpm lint clean
+- [x] Citations visible on old messages after refresh
+- [x] Timestamps correct (never GMT-shifted)
+- [x] Upload doesn't balloon Next server memory
+- [x] Warm-boot splash ≲1.5s; cold boot shows phase text
+- [x] Sidebar session title auto-updates after first Q&A
+- [x] Failed doc → Retry → re-ingests; ready doc → 409 toast
+- [x] Copy, timestamps, code blocks, prompts, shortcuts, sizes, prefetch verified
+- [x] SDD updated for every contract change
