@@ -1,5 +1,5 @@
-import type { SourceCitation } from '@/lib/types';
 import { getPublicBackendUrl } from '@/lib/public-backend-url';
+import type { SourceCitation } from '@/lib/types';
 
 export type ChatStreamEvent =
   | { type: 'sources'; sources: SourceCitation[] }
@@ -12,10 +12,15 @@ type StreamChatOptions = {
   onEvent: (event: ChatStreamEvent) => void;
 };
 
+/**
+ * Parses a single SSE block into a typed event.
+ * Returns null if the block is incomplete or malformed.
+ */
 function parseEvent(block: string): ChatStreamEvent | null {
   let eventName = '';
   const dataLines: string[] = [];
 
+  // Parse SSE fields (event, data, id, etc.)
   for (const line of block.split(/\r?\n/)) {
     if (!line || line.startsWith(':')) continue;
 
@@ -31,13 +36,22 @@ function parseEvent(block: string): ChatStreamEvent | null {
 
   if (!eventName || dataLines.length === 0) return null;
 
-  const data: unknown = JSON.parse(dataLines.join('\n'));
-  if (!data || typeof data !== 'object') return null;
-  const payload = data as Record<string, unknown>;
-
-  if (eventName === 'sources' && Array.isArray(data)) {
-    return { type: 'sources', sources: data as SourceCitation[] };
+  let parsedData: unknown;
+  try {
+    parsedData = JSON.parse(dataLines.join('\n'));
+  } catch {
+    // Ignore malformed JSON to prevent stream crashes
+    return null;
   }
+
+  if (!parsedData || typeof parsedData !== 'object') return null;
+
+  // Map parsed data to strongly typed events
+  if (eventName === 'sources' && Array.isArray(parsedData)) {
+    return { type: 'sources', sources: parsedData as SourceCitation[] };
+  }
+
+  const payload = parsedData as Record<string, unknown>;
 
   if (eventName === 'token' && typeof payload.text === 'string') {
     return { type: 'token', text: payload.text };
@@ -58,7 +72,10 @@ function parseEvent(block: string): ChatStreamEvent | null {
   return null;
 }
 
-/** Streams one chat answer using the backend's SSE contract. */
+/**
+ * Streams chat responses using Server-Sent Events (SSE).
+ * Handles buffering to ensure complete event blocks are processed.
+ */
 export async function streamChatAnswer(
   sessionId: string,
   question: string,
@@ -93,12 +110,14 @@ export async function streamChatAnswer(
     return event.type === 'done';
   };
 
+  // Read stream chunks and buffer them until a complete SSE block is received
   while (true) {
     const { done, value } = await reader.read();
     buffer += decoder.decode(value, { stream: !done });
 
     const blocks = buffer.split(/\r?\n\r?\n/);
     buffer = blocks.pop() ?? '';
+
     for (const block of blocks) {
       if (dispatchBlock(block)) {
         await reader.cancel();
