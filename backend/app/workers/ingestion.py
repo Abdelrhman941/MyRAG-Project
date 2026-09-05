@@ -1,8 +1,10 @@
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import arq
 from arq import Retry
 from arq.connections import RedisSettings
 from sqlalchemy import select
@@ -65,6 +67,11 @@ async def ingest_document(ctx: dict[str, Any], document_id: str) -> None:
             doc = await db.get(Document, doc_uuid)
             if doc:
                 await service.fail_document(doc, e.reason)
+        except Exception:
+            logger.exception("Unexpected error on doc %s", document_id)
+            doc = await db.get(Document, doc_uuid)
+            if doc:
+                await service.fail_document(doc, "internal_error")
 
 
 async def on_startup(ctx: dict[str, Any]) -> None:
@@ -120,6 +127,32 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
         await vector_store.client.close()
 
 
+async def stalled_watchdog(ctx: dict[str, Any]) -> None:
+    """Cron job to fail documents stuck in processing."""
+    settings = get_settings()
+    session_maker = get_session_maker()
+
+    # Needs to be older than timeout + 60s
+    threshold = datetime.now(UTC) - timedelta(
+        seconds=settings.INGESTION_JOB_TIMEOUT_S + 60
+    )
+
+    async with session_maker() as db:
+        # Dummy service (no storage/vector_store needed for fail_document)
+        service = IngestionService(db, None, None, settings)  # type: ignore
+
+        stmt = select(Document).where(
+            Document.status == DocumentStatus.PROCESSING,
+            Document.updated_at < threshold,
+        )
+        result = await db.execute(stmt)
+        docs = result.scalars().all()
+
+        for doc in docs:
+            logger.warning("Watchdog failing stalled document: %s", doc.id)
+            await service.fail_document(doc, "stalled")
+
+
 # Configure worker
 settings = get_settings()
 
@@ -127,6 +160,7 @@ settings = get_settings()
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     functions = [ingest_document]  # noqa: RUF012
+    cron_jobs = [arq.cron(stalled_watchdog, minute=set(range(60)))]  # noqa: RUF012
     on_startup = on_startup
     on_shutdown = on_shutdown
     max_jobs = settings.INGESTION_WORKER_MAX_JOBS

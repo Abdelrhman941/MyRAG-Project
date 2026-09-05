@@ -1,4 +1,4 @@
-.PHONY: back-up front-up back-down front-down down
+.PHONY: back-up back-down front-down down
 
 # ------------------------------------------------------------------------------
 # Run Commands (Auto-kill existing process on port before start)
@@ -8,10 +8,6 @@ back-up: back-down
 	@-docker.exe compose up -d qdrant redis || docker compose up -d qdrant redis || echo "⚠ Could not start Docker services automatically. Please ensure Docker is running."
 	@echo "==> Backend starting..."
 	@cd backend && $(MAKE) run
-
-front-up:
-	@echo "==> Frontend starting..."
-	@cd frontend && rm -rf .next && pnpm build && pnpm start
 
 # ------------------------------------------------------------------------------
 # Stop Commands (Kill process using port 8000 for backend & 3000 for frontend)

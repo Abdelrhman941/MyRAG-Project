@@ -158,6 +158,7 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 | LLM provider failure    | 502                                                  | `llm_provider_error` ✅        |
 | Ingestion failure       | document status → `failed` (no HTTP error to client) | ✅                             |
 | Invalid state for retry | 409                                                  | `invalid_document_state` ✅    |
+| Ingestion stalled       | document status → `failed` (via watchdog cron)       | `stalled` ✅                   |
 
 ---
 
@@ -176,6 +177,7 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - Correctness and performance optimizations (App-scoped singletons, lock-free deduplication, prefetch session filters in Qdrant, threadpool for parsing/chunking, CORS support)
 - SSE Streaming End-to-End (Streaming backend generation to Next.js client, eliminating rag-phase polling and HTTP timeouts)
 - ARQ Background Ingestion (Redis-backed ingestion queues, exponential backoff retries, dedicated worker processes, and automatic recovery sweep on boot).
+- Watchdog cron job that ensures documents never get stuck in `processing` indefinitely if a worker silently crashes.
 
 ---
 
@@ -184,3 +186,4 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - BGE-M3 first load downloads ~2 GB and occupies ~2–3 GB RAM — lazy singleton implemented and pre-loaded on boot in both API server and workers.
 - SQLite is fine at MVP scale; the session repository port exists so it can be swapped.
 - No auth — MVP is single-user local. Do not expose beyond localhost.
+- **Resolved Risk:** The "stuck forever in processing" risk class has been entirely eliminated by a 1-minute `stalled_watchdog` cron job.
