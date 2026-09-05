@@ -41,7 +41,6 @@ import {
   Plus,
   Sun,
   Trash2,
-  TrashIcon,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -365,7 +364,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
                 />
               }
             >
-              <TrashIcon className="size-4" />
+              <Trash2 className="size-4" />
             </TooltipTrigger>
             <TooltipContent>Delete all chats</TooltipContent>
           </Tooltip>

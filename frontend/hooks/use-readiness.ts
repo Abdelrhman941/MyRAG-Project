@@ -30,6 +30,7 @@ export function useReadiness() {
   useEffect(() => {
     let cancelled = false;
     let checking = false;
+    let timeout: ReturnType<typeof setTimeout>;
 
     const checkReadiness = async () => {
       if (checking) return;
@@ -42,20 +43,19 @@ export function useReadiness() {
         const status = normalizeStatus(result.status);
         setState({ status, detail: result.detail });
 
-        if (status === 'ready' || status === 'error') {
-          clearInterval(interval);
+        if (status === 'warming' || status === 'qdrant_not_ready' || status === 'connecting') {
+          timeout = setTimeout(() => void checkReadiness(), 2000);
         }
       } finally {
         checking = false;
       }
     };
 
-    const interval = setInterval(() => void checkReadiness(), 2000);
     void checkReadiness();
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearTimeout(timeout);
     };
   }, [attempt]);
 

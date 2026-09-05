@@ -152,3 +152,11 @@
 - [x] Failed doc → Retry → re-ingests; ready doc → 409 toast
 - [x] Copy, timestamps, code blocks, prompts, shortcuts, sizes, prefetch verified
 - [x] SDD updated for every contract change
+
+## Phase 3 — Final Fixes
+- [x] Task 1: KB staleness bug
+- [x] Task 2: Timezone validators
+- [x] Task 3: ChatMessage sources schema
+- [x] Task 4: UX polish on upload feedback
+- [x] Task 5: Splash screen redesign
+- [ ] Task 6: Nits (hooks, imports)

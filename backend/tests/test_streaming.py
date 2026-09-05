@@ -71,6 +71,9 @@ async def test_streaming_endpoint(test_app, db_session):
         async def add_message(self, sid, role, content):
             return {"id": uuid.uuid4(), "role": role, "content": content}
 
+        async def get_recent_messages(self, sid, n):
+            return []
+
         async def list_messages(self, sid, limit=50, offset=0):
             return []
 
@@ -171,6 +174,9 @@ async def test_streaming_mid_stream_error(test_app, db_session):
         async def add_message(self, sid, role, content):
             self.messages.append((role, content))
             return {"id": uuid.uuid4(), "role": role, "content": content}
+
+        async def get_recent_messages(self, sid, n):
+            return []
 
         async def list_messages(self, sid, limit=50, offset=0):
             return []
