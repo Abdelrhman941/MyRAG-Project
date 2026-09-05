@@ -45,7 +45,7 @@ export function SplashScreen() {
   const isError = status === 'error';
   return (
     <main className={`splash-screen ${transitioning ? 'splash-screen--exiting' : ''}`}>
-      <div className="flex flex-col items-center animate-in fade-in duration-400 motion-reduce:animate-none">
+      <div className="flex flex-col items-center animate-in fade-in duration-[400ms] motion-reduce:animate-none">
         <Image
           src="/images/logos/nova.webp"
           alt="Nova Logo"

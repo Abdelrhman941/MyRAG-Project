@@ -337,8 +337,8 @@ function InputBar({
     <div className={cn('shrink-0 px-4 pb-4 w-full', className)}>
       <div className="mx-auto max-w-3xl flex flex-col gap-2">
         {attachments?.isUploading && (attachments.uploadingCount ?? 0) > 0 && (
-          <div className="self-start inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-[#303030] border border-neutral-200 dark:border-[#404040] rounded-full text-xs font-medium text-neutral-600 dark:text-neutral-300 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+          <div className="self-start inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-[#303030] border border-neutral-200 dark:border-[#404040] rounded-full text-xs font-medium text-neutral-600 dark:text-neutral-300 animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none motion-reduce:transition-none">
+            <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin motion-reduce:animate-none" />
             <span>Uploading {attachments.uploadingCount} file{attachments.uploadingCount === 1 ? '' : 's'}...</span>
           </div>
         )}
