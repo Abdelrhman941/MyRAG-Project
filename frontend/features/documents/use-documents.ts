@@ -1,6 +1,6 @@
 'use client';
 
-import { deleteDocumentAction, getDocuments } from '@/lib/api';
+import { deleteDocumentAction, getDocuments, retryDocumentAction } from '@/lib/api';
 import { useConfig } from '@/lib/config';
 import type { Document } from '@/lib/types';
 import { useEffect, useState, useTransition } from 'react';
@@ -247,5 +247,17 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
     });
   };
 
-  return { documents, isUploading, isPending, uploadFiles, handleDelete, deleteDocument };
+  const handleRetry = (documentId: string) => {
+    startTransition(async () => {
+      const result = await retryDocumentAction(documentId, sessionId!);
+      if (!result.success) {
+        toast.error(result.error?.message || 'Failed to retry document.');
+      } else {
+        toast.success('Document re-queued for processing.');
+        void refreshDocuments(sessionId!).catch(() => {});
+      }
+    });
+  };
+
+  return { documents, isUploading, isPending, uploadFiles, handleDelete, handleRetry, deleteDocument };
 }

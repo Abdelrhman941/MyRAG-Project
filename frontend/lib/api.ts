@@ -199,6 +199,22 @@ export async function deleteDocumentAction(documentId: string, sessionId: string
   }
 }
 
+export async function retryDocumentAction(documentId: string, sessionId: string) {
+  try {
+    await apiFetch(`/api/v1/documents/${encodeURIComponent(documentId)}/retry`, { method: 'POST' });
+    revalidatePath(`/chat/${sessionId}/documents`);
+    return { success: true };
+  } catch (e: unknown) {
+    return {
+      success: false,
+      error: (e as { data?: ApiError })?.data?.error || {
+        code: 'unknown',
+        message: 'Failed to retry document',
+      },
+    };
+  }
+}
+
 export async function getReadyStatusAction(): Promise<{ status: string; detail?: string }> {
   const url = `${BACKEND_URL}/readyz`;
   try {

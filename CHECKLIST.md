@@ -85,24 +85,24 @@
 
 ## Phase 2 — Premium UX polish
 
-- [ ] **2.1** Retry failed documents (KB table)
+- [x] **2.1** Retry failed documents (KB table)
   - "Retry" ghost button (RotateCcw) on failed rows
   - Calls Phase 0.3 endpoint via server action
   - Error toast on 409/404
   - _Verify_: retry works end-to-end, toast on invalid state
 
-- [ ] **2.2** Copy button on assistant messages
+- [x] **2.2** Copy button on assistant messages
   - Hover-revealed copy icon, copies raw markdown
   - "Copied" micro-feedback
   - Disabled during streaming
   - _Verify_: copies correct content, feedback visible
 
-- [ ] **2.3** Message timestamps
+- [x] **2.3** Message timestamps
   - Small muted timestamp under each bubble
   - Using parseUtcDate(), toLocaleTimeString
   - _Verify_: correct local time displayed
 
-- [ ] **2.4** Code blocks
+- [x] **2.4** Code blocks
   - Custom pre/code in ReactMarkdown
   - Dark surface, horizontal scroll, mono font
   - Copy-per-block button (hover)
@@ -110,7 +110,7 @@
   - Works in both light + dark themes
   - _Verify_: code blocks render correctly in both themes
 
-- [ ] **2.5** Empty-state suggested prompts
+- [x] **2.5** Empty-state suggested prompts
   - Suggestion chips from session KB document names
   - "Summarize {file}", "What are the key points in {file}?"
   - ≥2 docs: "Compare the main ideas across my documents"
@@ -118,20 +118,20 @@
   - Clicking sends as message
   - _Verify_: chips appear with doc names, clicking sends message
 
-- [ ] **2.6** Keyboard shortcuts
+- [x] **2.6** Keyboard shortcuts
   - Ctrl/Cmd+K → New Chat
   - Ctrl/Cmd+/ → toggle sidebar
   - Ignore in input/textarea (except Cmd+K)
   - Tooltip hints on sidebar buttons
   - _Verify_: shortcuts work, tooltips visible
 
-- [ ] **2.7** KB file-size column
+- [x] **2.7** KB file-size column
   - "Size" column using file_size_bytes
   - Formatted KB/MB, one decimal
   - NULL → "—"
   - _Verify_: sizes display correctly
 
-- [ ] **2.8** Session prefetch
+- [x] **2.8** Session prefetch
   - `<Link prefetch={true}>` on sidebar session links
   - _Verify_: switching chats feels instant
 

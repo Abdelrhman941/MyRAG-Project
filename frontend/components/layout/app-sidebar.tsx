@@ -46,7 +46,7 @@ import {
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 function relativeDate(value: string): string {
@@ -97,7 +97,7 @@ function WorkspaceNavigation({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              render={<Link href={`/chat/${activeSessionId}`} />}
+              render={<Link href={`/chat/${activeSessionId}`} prefetch={true} />}
               isActive={pathname === `/chat/${activeSessionId}`}
             >
               <MessageSquare className="size-4" />
@@ -106,7 +106,7 @@ function WorkspaceNavigation({
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
-              render={<Link href={`/chat/${activeSessionId}/documents`} />}
+              render={<Link href={`/chat/${activeSessionId}/documents`} prefetch={true} />}
               isActive={pathname === `/chat/${activeSessionId}/documents`}
             >
               <Files className="size-4" />
@@ -163,7 +163,7 @@ function ChatList({
             sessions.map((session) => (
               <SidebarMenuItem key={session.id} className="group relative">
                 <SidebarMenuButton
-                  render={<Link href={`/chat/${session.id}`} />}
+                  render={<Link href={`/chat/${session.id}`} prefetch={true} />}
                   isActive={activeSessionId === session.id}
                   className="h-auto min-h-12 py-2.5 pr-10"
                 >
@@ -262,6 +262,19 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
     });
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        startTransition(() => {
+          createSessionAction();
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <Sidebar className="border-sidebar-border">
       <SidebarHeader className="gap-4 p-4">
@@ -285,14 +298,21 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
             className="h-8 w-auto max-w-28 object-contain object-left"
           />
         </div>
-        <Button
-          onClick={() => startTransition(() => createSessionAction())}
-          disabled={isPending}
-          className="w-full justify-start gap-2"
-        >
-          <Plus className="size-4" />
-          New Chat
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                onClick={() => startTransition(() => createSessionAction())}
+                disabled={isPending}
+                className="w-full justify-start gap-2"
+              >
+                <Plus className="size-4" />
+                New Chat
+              </Button>
+            }
+          />
+          <TooltipContent>New Chat ⌘K</TooltipContent>
+        </Tooltip>
       </SidebarHeader>
 
       <Separator />

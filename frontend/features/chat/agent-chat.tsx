@@ -1,9 +1,9 @@
 'use client';
 
 import type { SourceCitation } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import { ArrowUp, Paperclip, Square } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { cn, parseUtcDate } from '@/lib/utils';
+import { ArrowUp, Paperclip, Square, Check, Copy } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type ComponentPropsWithoutRef, type ElementType } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Citations } from './citations';
@@ -25,6 +25,7 @@ export type AgentMessage = {
   role: 'user' | 'assistant';
   parts: MessagePart[];
   sources?: SourceCitation[];
+  createdAt?: string;
 };
 
 export type AgentChatProps = {
@@ -42,6 +43,7 @@ export type AgentChatProps = {
   className?: string;
   disabled?: boolean;
   placeholder?: string;
+  suggestedDocuments?: string[];
 };
 
 const SendIcon = () => <ArrowUp className="w-5 h-5" strokeWidth={2.5} />;
@@ -60,11 +62,63 @@ function UserBubble({ text }: { text: string }) {
 
 const MARKDOWN_PLUGINS = [remarkGfm];
 
+const CodeBlock = memo(function CodeBlock({
+  className,
+  children,
+  ...props
+}: ComponentPropsWithoutRef<'code'> & { inline?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const match = /language-(\w+)/.exec(className || '');
+  const isInline = !match && !className?.includes('language-') && !String(children).includes('\n');
+
+  if (isInline) {
+    return (
+      <code className="bg-neutral-200 dark:bg-[#303030] px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+        {children}
+      </code>
+    );
+  }
+
+  const codeText = String(children).replace(/\n$/, '');
+
+  return (
+    <div className="relative group my-4 rounded-md overflow-hidden bg-neutral-900 text-neutral-100 dark:bg-[#151515] border border-neutral-800">
+      <div className="flex items-center justify-between px-4 py-2 bg-neutral-800 dark:bg-[#252525] text-xs font-mono text-neutral-400">
+        <span>{match?.[1] || 'text'}</span>
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(codeText);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          }}
+          className="hover:text-neutral-200 transition-colors"
+          aria-label="Copy code"
+        >
+          {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+      <div className="p-4 overflow-x-auto custom-scrollbar text-sm">
+        <code className={cn("font-mono", className)} {...props}>
+          {children}
+        </code>
+      </div>
+    </div>
+  );
+});
+
 const AssistantText = memo(function AssistantText({ text }: { text: string }) {
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[90%] text-[15px] leading-relaxed text-neutral-800 dark:text-neutral-200 wrap-break-word prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-neutral-100 dark:prose-pre:bg-[#202020] prose-pre:border dark:prose-pre:border-neutral-800">
-        <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS}>{text}</ReactMarkdown>
+    <div className="flex justify-start w-full min-w-0">
+      <div className="max-w-full lg:max-w-[90%] text-[15px] leading-relaxed text-neutral-800 dark:text-neutral-200 wrap-break-word prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:border-0">
+        <ReactMarkdown
+          remarkPlugins={MARKDOWN_PLUGINS}
+          components={{
+            pre: ({ children }) => <pre className="p-0 m-0 bg-transparent border-none overflow-visible">{children}</pre>,
+            code: CodeBlock as ElementType
+          }}
+        >
+          {text}
+        </ReactMarkdown>
       </div>
     </div>
   );
@@ -122,7 +176,16 @@ function ThinkingBubble({ ragPhase = 'idle' }: { ragPhase?: string }) {
 }
 
 const MessageItem = memo(
-  function MessageItem({ message }: { message: AgentMessage }) {
+  function MessageItem({ message, status }: { message: AgentMessage, status?: ChatStatus }) {
+    const [copied, setCopied] = useState(false);
+
+    const fullText = useMemo(() => {
+      return message.parts
+        .filter(p => p.type === 'text')
+        .map(p => (p as { text: string }).text)
+        .join('\n');
+    }, [message.parts]);
+
     return (
       <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
         {message.parts.map((part, index) => {
@@ -140,6 +203,27 @@ const MessageItem = memo(
             sources={message.sources}
           />
         )}
+        {message.createdAt && (
+          <div className={cn(
+            "flex items-center gap-2 text-[11px] text-muted-foreground px-1 mt-1",
+            message.role === 'user' ? "justify-end" : "justify-start"
+          )}>
+            <span>{parseUtcDate(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            {message.role === 'assistant' && (
+              <button
+                disabled={status === 'streaming'}
+                onClick={() => {
+                  navigator.clipboard.writeText(fullText);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   },
@@ -148,9 +232,11 @@ const MessageItem = memo(
     const nextMessage = next.message;
 
     return (
+      previous.status === next.status &&
       previousMessage.stableId === nextMessage.stableId &&
       previousMessage.role === nextMessage.role &&
       previousMessage.sources === nextMessage.sources &&
+      previousMessage.createdAt === nextMessage.createdAt &&
       previousMessage.parts.length === nextMessage.parts.length &&
       previousMessage.parts.every((part, index) => {
         const nextPart = nextMessage.parts[index];
@@ -182,7 +268,7 @@ const MessageList = memo(function MessageList({
     <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 scroll-smooth custom-scrollbar">
       <div className="mx-auto max-w-3xl flex flex-col gap-6">
         {messages.map((message) => (
-          <MessageItem key={message.stableId} message={message} />
+          <MessageItem key={message.stableId} message={message} status={status} />
         ))}
         {isThinking && (
           <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -337,6 +423,7 @@ export const AgentChat = memo(function AgentChat({
   className,
   disabled,
   placeholder,
+  suggestedDocuments,
 }: AgentChatProps) {
   const [draft, setDraft] = useState('');
 
@@ -362,6 +449,35 @@ export const AgentChat = memo(function AgentChat({
   const isEmpty = !error && messages.length === 0;
   const isCenteredEmpty = isEmpty && emptyStatePosition === 'center';
 
+  const renderSuggestions = () => {
+    if (!suggestedDocuments) return null;
+
+    let suggestions: string[] = [];
+    if (suggestedDocuments.length === 0) {
+      suggestions = ["Upload documents in the Knowledge Base to get started"];
+    } else if (suggestedDocuments.length === 1) {
+      const file = suggestedDocuments[0];
+      suggestions = [`Summarize ${file}`, `What are the key points in ${file}?`];
+    } else {
+      suggestions = ["Compare the main ideas across my documents"];
+    }
+
+    return (
+      <div className="flex flex-wrap justify-center gap-2 mt-4">
+        {suggestions.map((suggestion, i) => (
+          <button
+            key={i}
+            onClick={() => onSend?.({ role: 'user', content: suggestion })}
+            disabled={disabled}
+            className="px-4 py-2 text-sm rounded-full border border-neutral-200 dark:border-neutral-800 bg-white hover:bg-neutral-50 dark:bg-[#202020] dark:hover:bg-[#252525] text-neutral-700 dark:text-neutral-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   const inputBarNode: ReactNode = (
     <InputBar
       onSend={onSend}
@@ -384,7 +500,10 @@ export const AgentChat = memo(function AgentChat({
             <h1 className="text-3xl font-semibold text-center text-foreground">
               How can I help you?
             </h1>
-            {inputBarNode}
+            <div className="flex flex-col gap-4">
+              {inputBarNode}
+              {renderSuggestions()}
+            </div>
           </div>
         </div>
       ) : (

@@ -18,7 +18,7 @@ export function MessageFeed({
   const { messages, phase, isStreaming, send, stop } = useChatStream(initialMessages, sessionId);
 
   const config = useConfig();
-  const { uploadFiles, isUploading } = useDocuments(sessionId);
+  const { documents, uploadFiles, isUploading } = useDocuments(sessionId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { status: readinessStatus, detail: readinessDetail, retry } = useReadiness();
   const modelReady = readinessStatus === 'ready';
@@ -32,6 +32,7 @@ export function MessageFeed({
         stableId: message.clientId,
         role: message.role,
         sources: message.sources,
+        createdAt: message.created_at,
         parts: [
           ...(message.content.trim() ? [{ type: 'text' as const, text: message.content }] : []),
           ...(message.error
@@ -102,6 +103,7 @@ export function MessageFeed({
         emptyStatePosition="center"
         disabled={!modelReady}
         placeholder={!modelReady ? 'Waiting for model...' : 'Message...'}
+        suggestedDocuments={documents?.map(d => d.original_file_name)}
         attachments={{
           onAttach: () => fileInputRef.current?.click(),
           isUploading,

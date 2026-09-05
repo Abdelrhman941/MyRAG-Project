@@ -22,10 +22,16 @@ import {
 } from '@/components/ui/table';
 import { useConfig } from '@/lib/config';
 import type { Document } from '@/lib/types';
-import { File, FileUp, Loader2, Trash2, UploadCloud } from 'lucide-react';
+import { File, FileUp, Loader2, Trash2, UploadCloud, RotateCcw } from 'lucide-react';
 import { useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useDocuments } from './use-documents';
+
+function formatSize(bytes?: number | null) {
+  if (bytes == null) return '—';
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const BUSY_STATUSES: Document['status'][] = ['processing', 'uploaded', 'deleting'];
 
@@ -63,7 +69,7 @@ export function DocumentManager({
   initialDocuments: Document[];
   sessionId: string;
 }) {
-  const { documents, isUploading, isPending, uploadFiles, handleDelete, deleteDocument } =
+  const { documents, isUploading, isPending, uploadFiles, handleDelete, handleRetry, deleteDocument } =
     useDocuments(sessionId, initialDocuments);
   const config = useConfig();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -168,6 +174,7 @@ export function DocumentManager({
             <TableRow>
               <TableHead>Filename</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Size</TableHead>
               <TableHead>Added</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -175,7 +182,7 @@ export function DocumentManager({
           <TableBody>
             {documents.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-48">
+                <TableCell colSpan={5} className="h-48">
                   <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
                     <FileUp className="size-8" />
                     <p>Drop files here or click Select Files</p>
@@ -195,9 +202,24 @@ export function DocumentManager({
                     <DocumentStatusBadge status={document.status} />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
+                    {formatSize(document.file_size_bytes)}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
                     {new Date(document.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
+                    {document.status === 'failed' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRetry(document.id)}
+                        disabled={isPending}
+                        aria-label="Retry document"
+                        className="text-muted-foreground hover:bg-neutral-100 dark:hover:bg-[#404040]"
+                      >
+                        <RotateCcw className="size-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
