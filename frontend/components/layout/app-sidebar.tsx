@@ -289,12 +289,12 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
             height={40}
             className="size-10 shrink-0"
           />
-          <div className="relative h-6 w-24 ml-1">
+          <div className="relative h-10 w-32 ml-1">
             <Image
               src="/images/logos/nova-text.webp"
               alt="Nova"
               fill
-              className="object-contain brightness-0 dark:invert"
+              className="object-contain object-left brightness-0 dark:invert"
             />
           </div>
         </div>
