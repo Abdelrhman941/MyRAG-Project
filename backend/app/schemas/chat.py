@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class ChatSessionResponse(BaseModel):
@@ -10,6 +10,13 @@ class ChatSessionResponse(BaseModel):
     id: UUID
     title: str | None
     created_at: datetime
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v: datetime) -> datetime:
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
 
 
 class ChatSessionListResponse(BaseModel):
@@ -32,6 +39,13 @@ class ChatMessageResponse(BaseModel):
     content: str
     created_at: datetime
     sources: list[SourceCitation] | None = None
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v: datetime) -> datetime:
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
 
 
 class ChatMessageListResponse(BaseModel):
