@@ -264,6 +264,13 @@ const MessageList = memo(function MessageList({
   ragPhase?: string;
 }) {
   const isThinking = status === 'streaming' && messages[messages.length - 1]?.role === 'user';
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, status, ragPhase]);
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 scroll-smooth custom-scrollbar">
@@ -276,6 +283,7 @@ const MessageList = memo(function MessageList({
             <ThinkingBubble ragPhase={ragPhase} />
           </div>
         )}
+        <div ref={bottomRef} className="h-px" />
       </div>
     </div>
   );

@@ -151,12 +151,12 @@ function ChatList({
   onDelete: (sessionId: string) => void;
 }) {
   return (
-    <SidebarGroup className="p-0">
-      <SidebarGroupLabel className="gap-2 px-2">
+    <SidebarGroup className="p-0 flex-1 overflow-hidden flex flex-col">
+      <SidebarGroupLabel className="gap-2 px-2 shrink-0">
         <MessageSquare className="size-3.5" />
         Chats
       </SidebarGroupLabel>
-      <SidebarGroupContent>
+      <SidebarGroupContent className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2 -mx-2">
         <SidebarMenu>
           {sessions.length ? (
             sessions.map((session) => (
@@ -317,15 +317,17 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
 
       <Separator />
 
-      <SidebarContent className="px-2 py-3">
-        {activeSessionId && (
-          <WorkspaceNavigation
-            activeSessionId={activeSessionId}
-            pathname={pathname}
-            documents={documents}
-          />
-        )}
-        <Separator className="my-3" />
+      <SidebarContent className="px-2 py-3 overflow-hidden flex flex-col gap-0">
+        <div className="shrink-0 flex flex-col">
+          {activeSessionId && (
+            <WorkspaceNavigation
+              activeSessionId={activeSessionId}
+              pathname={pathname}
+              documents={documents}
+            />
+          )}
+          <Separator className="my-3" />
+        </div>
         <ChatList
           sessions={initialSessions}
           activeSessionId={activeSessionId}
