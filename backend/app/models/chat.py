@@ -1,3 +1,4 @@
+from typing import Any
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -44,7 +45,7 @@ class ChatMessageModel(Base):
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    sources: Mapped[str | None] = mapped_column(JSON, nullable=True)
+    sources: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -63,4 +64,4 @@ class ChatMessage(BaseModel):
     role: str
     content: str
     created_at: datetime
-    sources: list[dict] | None = None
+    sources: list[dict[str, Any]] | None = None

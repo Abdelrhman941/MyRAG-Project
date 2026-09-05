@@ -1,4 +1,5 @@
 # app/apis/system.py
+from typing import Any
 from fastapi import APIRouter, Request, Response
 
 from ..dependencies import SettingsDep
@@ -49,7 +50,7 @@ async def readyz(request: Request, response: Response) -> dict[str, str]:
 
 
 @system_router.get("/api/v1/system/config")
-def config(settings: SettingsDep) -> dict:
+def config(settings: SettingsDep) -> dict[str, Any]:
     from ..core.enums.document import DocumentType
 
     return {

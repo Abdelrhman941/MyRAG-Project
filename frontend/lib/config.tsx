@@ -9,14 +9,19 @@ export type AppConfig = {
   app_name: string;
   app_version: string;
   max_question_length: number;
-} | null;
+};
 
-const ConfigContext = createContext<AppConfig>(null);
+const ConfigContext = createContext<AppConfig | null>(null);
+ConfigContext.displayName = 'AppConfigContext';
 
 export function ConfigProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
   return <ConfigContext.Provider value={config}>{children}</ConfigContext.Provider>;
 }
 
 export function useConfig() {
-  return useContext(ConfigContext);
+  const context = useContext(ConfigContext);
+  if (context === null) {
+    throw new Error('useConfig must be used within a ConfigProvider');
+  }
+  return context;
 }

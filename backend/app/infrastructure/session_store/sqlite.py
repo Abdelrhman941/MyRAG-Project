@@ -10,10 +10,11 @@ from ...models.chat import ChatMessageModel, ChatSession
 from ..ports import MessageData, SessionData
 
 
-def _ensure_utc(dt: datetime | None) -> datetime | None:
+def _ensure_utc(dt: datetime | None) -> datetime:
     """Normalize naive datetimes (from SQLite) to UTC."""
     if dt is None:
-        return dt
+        # Fallback to current UTC time if an unexpected None is encountered
+        return datetime.now(UTC)
     return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
 
 
