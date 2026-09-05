@@ -23,9 +23,12 @@ export function SplashScreen() {
 
   useEffect(() => {
     if (status === 'ready') {
-      setOpacity(0);
-      const hideTimer = setTimeout(() => setHidden(true), 1000); // Wait for fade out
-      return () => clearTimeout(hideTimer);
+      const fadeTimer = setTimeout(() => setOpacity(0), 50);
+      const hideTimer = setTimeout(() => setHidden(true), 1050); // Wait for fade out
+      return () => {
+        clearTimeout(fadeTimer);
+        clearTimeout(hideTimer);
+      };
     }
   }, [status]);
 
