@@ -31,10 +31,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/favicon/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/svg+xml" href="/favicon/icon0.svg" />
+        <link rel="icon" type="image/png" href="/favicon/icon1.png" />
+        <link rel="apple-touch-icon" href="/favicon/apple-icon.png" />
+        <link rel="manifest" href="/favicon/manifest.json" />
+      </head>
       <body
         className={`${inter.className} min-h-screen bg-background text-foreground antialiased selection:bg-primary/20`}
       >
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <ThemeProvider>
           <ConfigProvider config={config}>
             <TooltipProvider>{children}</TooltipProvider>
             <Toaster />

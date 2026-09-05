@@ -1,5 +1,5 @@
 [project]
-name = "ٌZRAG"
+name = "Nova"
 version = "0.1.0"
 description = "A backend service for RAG applications."
 readme = "README.md"

@@ -6,9 +6,9 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   const sessions = await getSessions();
 
   return (
-    <SidebarProvider>
+    <SidebarProvider className="app-page-enter">
       <AppSidebar initialSessions={sessions} />
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-background relative">
+      <main className="relative flex h-screen flex-1 flex-col overflow-hidden bg-background">
         <div className="absolute top-3 left-3 z-50">
           <SidebarTrigger />
         </div>

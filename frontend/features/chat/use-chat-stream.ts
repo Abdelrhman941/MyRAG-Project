@@ -1,6 +1,7 @@
 'use client';
 
 import { streamChatAnswer, type ChatStreamEvent } from '@/lib/api/stream';
+import { revalidateSessionsAction } from '@/lib/api';
 import type { Message, SourceCitation } from '@/lib/types';
 import { useCallback, useRef, useState } from 'react';
 
@@ -69,7 +70,7 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
 
         if (event.type === 'sources') {
           pendingSources = event.sources;
-          setPhase('retrieving');
+          setPhase('generating');
           return;
         }
 
@@ -88,11 +89,20 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
 
         if (event.type === 'done') {
           ensureAssistant();
-          setMessages((current) =>
-            current.map((message) =>
+          setMessages((current) => {
+            // If this is the first exchange (2 messages = user + assistant),
+            // revalidate the session list so the sidebar shows the auto-generated title.
+            if (current.length === 2) {
+              try {
+                void revalidateSessionsAction();
+              } catch {
+                // Fire-and-forget — sidebar will update on next navigation
+              }
+            }
+            return current.map((message) =>
               message.clientId === assistantClientId ? { ...message, id: event.messageId } : message
-            )
-          );
+            );
+          });
           return;
         }
 

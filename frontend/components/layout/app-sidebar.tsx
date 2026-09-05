@@ -26,9 +26,11 @@ import {
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useDocuments } from '@/features/documents/use-documents';
+import { useThemeTransition } from '@/hooks/use-theme-transition';
 import { createSessionAction, deleteSessionAction } from '@/lib/api';
 import { useConfig } from '@/lib/config';
 import type { Document, Session } from '@/lib/types';
+import { parseUtcDate } from '@/lib/utils';
 import {
   FileCode2,
   FileText,
@@ -41,19 +43,19 @@ import {
   Trash2,
   TrashIcon,
 } from 'lucide-react';
-import { useTheme } from 'next-themes';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 function relativeDate(value: string): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  const seconds = Math.max(0, Math.floor((Date.now() - parseUtcDate(value).getTime()) / 1000));
   if (seconds < 60) return 'now';
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-  return new Date(value).toLocaleDateString();
+  return parseUtcDate(value).toLocaleDateString();
 }
 
 function FileTypeIcon({ document }: { document: Document }) {
@@ -163,7 +165,7 @@ function ChatList({
                 <SidebarMenuButton
                   render={<Link href={`/chat/${session.id}`} />}
                   isActive={activeSessionId === session.id}
-                  className="pr-10"
+                  className="h-auto min-h-12 py-2.5 pr-10"
                 >
                   <div className="min-w-0 flex-1">
                     <span className="block truncate">{session.title || 'New Chat'}</span>
@@ -201,7 +203,7 @@ function ChatList({
 export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) {
   const pathname = usePathname();
   const config = useConfig();
-  const { resolvedTheme, setTheme } = useTheme();
+  const { theme, toggleTheme, isTransitioning: isThemeTransitioning } = useThemeTransition();
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
@@ -263,13 +265,25 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
   return (
     <Sidebar className="border-sidebar-border">
       <SidebarHeader className="gap-4 p-4">
-        <div className="flex items-center gap-2.5 px-1">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary font-bold text-sidebar-primary-foreground">
-            R
-          </div>
-          <span className="truncate text-sm font-semibold">
-            {config?.app_name || 'RAG Assistant'}
-          </span>
+        <div
+          className="flex h-10 items-center gap-2 px-1"
+          role="img"
+          aria-label={config?.app_name || 'Nova'}
+        >
+          <Image
+            src="/images/logos/nova-icon.webp"
+            alt=""
+            width={40}
+            height={40}
+            className="size-10 shrink-0"
+          />
+          <Image
+            src="/images/logos/nova-text.webp"
+            alt=""
+            width={225}
+            height={99}
+            className="h-8 w-auto max-w-28 object-contain object-left"
+          />
         </div>
         <Button
           onClick={() => startTransition(() => createSessionAction())}
@@ -301,15 +315,17 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
         />
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-3">
+      <SidebarFooter className="border-t border-sidebar-border bg-sidebar-accent/40 p-3">
         <div className="flex items-center justify-between">
           <Tooltip>
             <TooltipTrigger
               render={
                 <button
                   type="button"
-                  onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-                  className="rounded-md p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  onClick={toggleTheme}
+                  disabled={isThemeTransitioning}
+                  aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+                  className="rounded-md p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-50"
                 />
               }
             >

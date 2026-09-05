@@ -1,9 +1,11 @@
 'use client';
 
 import { AlertCircle, ArrowLeft, RefreshCw } from 'lucide-react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export function AppErrorScreen({ reset }: { reset: () => void }) {
+  const router = useRouter();
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
       <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 text-center shadow-2xl shadow-black/10 animate-in fade-in zoom-in-95 duration-500">
@@ -23,13 +25,14 @@ export function AppErrorScreen({ reset }: { reset: () => void }) {
             <RefreshCw className="size-4" />
             Try again
           </button>
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={() => router.replace('/')}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
           >
             <ArrowLeft className="size-4" />
             Back to chats
-          </Link>
+          </button>
         </div>
       </section>
     </main>

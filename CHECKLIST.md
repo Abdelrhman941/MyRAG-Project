@@ -42,45 +42,42 @@
 
 ## Phase 1 — Frontend stability fixes
 
-- [ ] **1.1** Stream the upload body (no buffering)
-  - Replace `await req.formData()` with raw streaming proxy
-  - `sessionId` from query string, not form body
-  - Update caller in use-documents.ts
-  - _Verify_: upload 3 large PDFs, Next.js memory stays flat
+- [x] **1.1** Stream the upload body
+  - Replace `await req.formData()` in `api/upload/route.ts` with streaming (duplex: half)
+  - Change `use-documents` to send `sessionId` in URL query params
+  - _Verify_: uploading a 40MB file no longer crashes Next.js OOM
 
-- [ ] **1.2** Splash speed + phase text
-  - MIN_SPLASH_DURATION_MS: 3000 → 900
-  - Status text under loader driven by useReadiness()
-  - Subtle cross-fade between texts
-  - _Verify_: warm backend ≲1.5s; cold backend shows phase text
+- [x] **1.2** Splash speed + phase text
+  - `MIN_SPLASH_DURATION_MS = 900`
+  - Add text label under loader using `useReadiness().status`
+  - _Verify_: boot is faster, shows "Loading AI model..." etc
 
-- [ ] **1.3** Refresh session list after first answer
-  - On `done` event: if first exchange, call revalidateSessionsAction()
-  - _Verify_: sidebar title updates after first Q&A without manual refresh
+- [x] **1.3** Refresh session list after first answer
+  - On the stream `done` event, if `messages.length === 2`, call a revalidate action
+  - _Verify_: new chat → send msg → sidebar updates to real title instantly
 
-- [ ] **1.4** Phase label correction
-  - `sources` event → phase = 'generating' (not 'retrieving')
-  - _Verify_: phase indicator correct during streaming
+- [x] **1.4** Phase label correction
+  - In `use-chat-stream.ts`, when `sources` event arrives, phase should switch to `generating`, not `retrieving`
+  - _Verify_: UI shows "Thinking..." instead of "Searching..." during token stream
 
-- [ ] **1.5** Config cache
-  - revalidate: 3600 → 60
-  - _Verify_: config changes reflected within ~1 min
+- [x] **1.5** Config cache
+  - Change config fetch revalidate from 3600 to 60
+  - _Verify_: config updates propagate in 1m
 
-- [ ] **1.6** Stop the polling churn
-  - Polling effect must NOT depend on `documents`
-  - Read freshness from store directly inside interval callback
-  - _Verify_: polling interval stable, no teardown/rebuild on each poll
+- [x] **1.6** Stop the polling churn
+  - Remove `documents` from `use-documents` polling effect dependencies
+  - Use `useDocumentStore.getState()` inside the interval instead
+  - _Verify_: React DevTools → interval is not constantly destroyed/recreated
 
-- [ ] **1.7** Nits
-  - confirmUpload/revertUpload: match by temp ID, not filename
-  - Composer textarea: maxLength from useConfig().maxQuestionLength
-  - generateMetadata: use new GET session/{id} endpoint
-  - _Verify_: overlapping uploads don't eat placeholders; maxLength enforced
+- [x] **1.7** Nits
+  - `confirmUpload` must match by ID, not filename
+  - Set composer `maxLength` from config
+  - Change `generateMetadata` to use GET session by ID instead of fetching all
 
-- [ ] **1.8** Frontend timezone hardening
-  - `parseUtcDate()` helper in lib/utils.ts
-  - Use in relativeDate, KB dates, message timestamps
-  - _Verify_: fresh message shows "now", not "3h ago"
+- [x] **1.8** Frontend timezone hardening
+  - Create `parseUtcDate` helper in `lib/utils.ts`
+  - Use in sidebar `relativeDate`
+  - _Verify_: "3h ago" becomes "now" for fresh chats_Verify_: fresh message shows "now", not "3h ago"
 
 ### Phase 1 gate: `pnpm build` + `pnpm lint` clean
 

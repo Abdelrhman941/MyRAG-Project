@@ -8,6 +8,7 @@ export type AppConfig = {
   accepted_extensions: string[];
   app_name: string;
   app_version: string;
+  max_question_length: number;
 } | null;
 
 const ConfigContext = createContext<AppConfig>(null);

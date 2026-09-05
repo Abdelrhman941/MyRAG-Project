@@ -5,6 +5,7 @@ export interface Document {
   created_at: string;
   session_id?: string;
   content_hash?: string;
+  file_size_bytes?: number | null;
 }
 
 export interface Session {

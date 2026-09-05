@@ -5,20 +5,20 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
-    const sessionId = formData.get('sessionId');
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('session');
 
-    if (typeof sessionId !== 'string' || !UUID_PATTERN.test(sessionId)) {
-      return NextResponse.json({ error: { message: 'Missing sessionId' } }, { status: 400 });
+    if (!sessionId || !UUID_PATTERN.test(sessionId)) {
+      return NextResponse.json({ error: { message: 'Missing or invalid session ID' } }, { status: 400 });
     }
-
-    // Remove sessionId from formData before sending to backend
-    formData.delete('sessionId');
 
     const url = `${getBackendUrl()}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/documents/batch`;
     const response = await fetch(url, {
       method: 'POST',
-      body: formData,
+      body: req.body,
+      headers: { 'content-type': req.headers.get('content-type')! },
+      // @ts-expect-error Node fetch requires duplex for streaming request bodies
+      duplex: 'half',
     });
 
     if (!response.ok) {

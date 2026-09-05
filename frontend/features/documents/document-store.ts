@@ -5,7 +5,7 @@ interface DocumentStore {
   documentsBySession: Record<string, Document[]>;
   setDocuments: (sessionId: string, docs: Document[]) => void;
   applyUploadOptimistic: (sessionId: string, newDocs: Document[]) => void;
-  confirmUpload: (sessionId: string, confirmedDocs: Document[]) => void;
+  confirmUpload: (sessionId: string, confirmedDocs: Document[], tempIds: string[]) => void;
   revertUpload: (sessionId: string, tempIds: string[]) => void;
   removeOptimistic: (sessionId: string, documentId: string) => void;
   markDeleting: (sessionId: string, documentId: string) => void;
@@ -39,13 +39,12 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
       };
     }),
 
-  confirmUpload: (sessionId, confirmedDocs) =>
+  confirmUpload: (sessionId, confirmedDocs, tempIds) =>
     set((state) => {
       const existing = state.documentsBySession[sessionId] || [];
-      // Remove temp docs that match the names of the confirmed docs
-      const confirmedNames = confirmedDocs.map((d) => d.original_file_name);
+      // Remove temp docs by ID, not by filename
       const filtered = existing.filter(
-        (d) => !(d.id.startsWith('temp-') && confirmedNames.includes(d.original_file_name))
+        (d) => !(d.id.startsWith('temp-') && tempIds.includes(d.id))
       );
       return {
         documentsBySession: {

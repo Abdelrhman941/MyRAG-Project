@@ -80,6 +80,18 @@ export async function getSessions(): Promise<Session[]> {
   return data.sessions;
 }
 
+export async function getSession(sessionId: string): Promise<Session | null> {
+  try {
+    return await apiFetch<Session>(
+      `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}`,
+      { next: { tags: [`session-${sessionId}`], revalidate: 0 } }
+    );
+  } catch (e: unknown) {
+    if ((e as { status?: number })?.status === 404) return null;
+    throw e;
+  }
+}
+
 export async function getMessages(sessionId: string): Promise<Message[] | null> {
   try {
     // Backend returns { messages: [...] } — unwrap the envelope
@@ -201,4 +213,8 @@ export async function getReadyStatusAction(): Promise<{ status: string; detail?:
   } catch (e: unknown) {
     return { status: 'error', detail: (e as Error).message || 'Connection failed' };
   }
+}
+
+export async function revalidateSessionsAction() {
+  revalidatePath('/chat');
 }

@@ -1,5 +1,5 @@
 import { MessageFeed } from '@/features/chat/message-feed';
-import { getMessages, getSessions } from '@/lib/api';
+import { getMessages, getSession } from '@/lib/api';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
@@ -9,8 +9,7 @@ type ChatSessionPageProps = {
 
 export async function generateMetadata({ params }: ChatSessionPageProps): Promise<Metadata> {
   const { session_id } = await params;
-  const sessions = await getSessions();
-  const session = sessions.find((item) => item.id === session_id);
+  const session = await getSession(session_id);
 
   return { title: session?.title || 'Chat' };
 }

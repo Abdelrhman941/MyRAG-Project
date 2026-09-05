@@ -7,6 +7,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Citations } from './citations';
+import { useConfig } from '@/lib/config';
 
 export type ChatStatus = 'ready' | 'streaming' | 'submitted' | 'idle';
 
@@ -215,6 +216,7 @@ function InputBar({
   disabled?: boolean;
 }) {
   const [internal, setInternal] = useState('');
+  const config = useConfig();
   const isControlled = controlledValue !== undefined;
   const input = isControlled ? controlledValue : internal;
   const setInput = useCallback(
@@ -270,6 +272,7 @@ function InputBar({
                 }
               }}
               placeholder={placeholder}
+              maxLength={config?.max_question_length ?? 8000}
               disabled={disabled}
               rows={1}
               className={cn(
