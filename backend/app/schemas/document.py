@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from ..core import DocumentStatus, DocumentType
 
@@ -14,9 +14,17 @@ class DocumentResponse(BaseModel):
     original_file_name: str
     document_type: DocumentType
     status: DocumentStatus
+    file_size_bytes: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _ensure_utc(cls, v: datetime) -> datetime:
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
 
 
 class BatchUploadError(BaseModel):

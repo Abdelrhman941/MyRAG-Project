@@ -57,6 +57,13 @@ async def list_sessions(repository: SessionRepositoryDep) -> Any:
     return {"sessions": sessions}
 
 
+@router.get("/sessions/{session_id}", response_model=ChatSessionResponse)
+async def get_session(
+    session: ValidSessionDep,
+) -> Any:
+    return session
+
+
 @router.get("/sessions/{session_id}/messages", response_model=ChatMessageListResponse)
 async def list_messages(
     session: ValidSessionDep,

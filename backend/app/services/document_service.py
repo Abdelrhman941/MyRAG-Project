@@ -109,6 +109,7 @@ class DocumentService:
             document_type=doc_type,
             status=DocumentStatus.UPLOADED,
             session_id=session_id,
+            file_size_bytes=total_size,
         )
 
         # The UNIQUE constraint on content_hash (and session_id) + IntegrityError

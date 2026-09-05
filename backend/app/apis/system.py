@@ -58,4 +58,5 @@ def config(settings: SettingsDep) -> dict:
         "accepted_extensions": [t.extension for t in DocumentType],
         "app_name": settings.APP_NAME,
         "app_version": settings.APP_VERSION,
+        "max_question_length": settings.MAX_QUESTION_LENGTH,
     }

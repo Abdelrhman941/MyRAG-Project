@@ -89,9 +89,9 @@ embed (BGE-M3 dense+sparse) → upsert Qdrant → status=ready (or failed)`
 Full detail: [diagrams/data-schema.md](diagrams/data-schema.md).
 
 **SQLite (SQLAlchemy + Alembic):**
-- `documents` ✅ implemented — id (UUID PK), original_file_name, content_hash (UNIQUE constraint), document_type, status, created_at, session_id
+- `documents` ✅ implemented — id (UUID PK), original_file_name, content_hash (UNIQUE constraint), document_type, status, file_size_bytes, created_at, session_id
 - `chat_sessions` ✅ — id (UUID PK), title, summary (nullable), summarized_message_count (int), created_at, updated_at
-- `chat_messages` ✅ — id (UUID PK), session_id (FK → chat_sessions), role, content, created_at
+- `chat_messages` ✅ — id (UUID PK), session_id (FK → chat_sessions), role, content, sources (JSON, nullable), created_at
 
 **Qdrant:**
 - Collection `chunks` ✅ — dense vector (BGE-M3, 1024-dim) + sparse vector; payload: document_id, chunk_index, text, original_file_name
@@ -116,13 +116,20 @@ Full detail: [diagrams/api-interactions.md](diagrams/api-interactions.md).
 | `POST /api/v1/chat/sessions/{id}/documents/batch` | ✅      | Upload up to 10 files, rate-limited 10/hour/IP           |
 | `GET /api/v1/chat/sessions/{id}/documents`        | ✅      | List documents                                           |
 | `DELETE /api/v1/documents/{id}`                   | ✅      | Delete document + its vectors                            |
+| `POST /api/v1/documents/{id}/retry`               | ✅      | Retry ingestion of a failed document                     |
 | `POST /api/v1/chat/sessions`                      | ✅      | Create chat session                                      |
 | `GET /api/v1/chat/sessions`                       | ✅      | List sessions                                            |
+| `GET /api/v1/chat/sessions/{id}`                  | ✅      | Get single session                                       |
 | `DELETE /api/v1/chat/sessions/{id}`               | ✅      | Delete session + docs + vectors                          |
 | `GET /api/v1/chat/sessions/{id}/messages`         | ✅      | Session history                                          |
 | `POST /api/v1/chat/sessions/{id}/messages/stream` | ✅      | Ask question → SSE Stream (sources, token+, done, error) |
 
 All errors use the standard shape: `{"error": {"code", "message", "details?", "request_id?"}}`.
+
+**Response contract notes:**
+- `GET .../messages` returns `ChatMessageResponse` with `sources: list[SourceCitation] | None` — persisted citations survive page refresh.
+- `GET /api/v1/system/config` returns `max_question_length` (int) in addition to existing fields.
+- `DocumentResponse` includes `file_size_bytes: int | None` — populated for newly uploaded documents, `null` for legacy documents.
 
 ---
 
@@ -150,6 +157,7 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 | Storage failure         | 500                                                  | `storage_error` ✅             |
 | LLM provider failure    | 502                                                  | `llm_provider_error` ✅        |
 | Ingestion failure       | document status → `failed` (no HTTP error to client) | ✅                             |
+| Invalid state for retry | 409                                                  | `invalid_document_state` ✅    |
 
 ---
 

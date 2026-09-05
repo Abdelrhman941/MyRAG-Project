@@ -81,7 +81,9 @@ class ChatService:
         used_sources: list[dict[str, Any]],
         background_tasks: BackgroundTasks,
     ) -> tuple[Any, list[SourceCitation]]:
-        msg = await self.repository.add_message(session_id, "assistant", answer_text)
+        msg = await self.repository.add_message(
+            session_id, "assistant", answer_text, sources=used_sources or None
+        )
 
         msg_count = await self.repository.count_messages(session_id)
         if self.memory.should_update_summary(msg_count):

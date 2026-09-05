@@ -1,3 +1,5 @@
+from datetime import datetime, UTC
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select, func
@@ -6,6 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.exceptions import NotFoundError
 from ...models.chat import ChatMessageModel, ChatSession
 from ..ports import MessageData, SessionData
+
+
+def _ensure_utc(dt: datetime | None) -> datetime | None:
+    """Normalize naive datetimes (from SQLite) to UTC."""
+    if dt is None:
+        return dt
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
 
 
 class SqliteSessionRepository:
@@ -19,8 +28,8 @@ class SqliteSessionRepository:
             "title": s.title,
             "summary": s.summary,
             "summarized_message_count": s.summarized_message_count,
-            "created_at": s.created_at,
-            "updated_at": s.updated_at,
+            "created_at": _ensure_utc(s.created_at),
+            "updated_at": _ensure_utc(s.updated_at),
         }
 
     @staticmethod
@@ -30,7 +39,8 @@ class SqliteSessionRepository:
             "session_id": m.session_id,
             "role": m.role,
             "content": m.content,
-            "created_at": m.created_at,
+            "created_at": _ensure_utc(m.created_at),
+            "sources": m.sources,
         }
 
     async def create_session(self) -> UUID:
@@ -68,9 +78,15 @@ class SqliteSessionRepository:
         await self.session.commit()
 
     async def add_message(
-        self, session_id: UUID, role: str, content: str
+        self,
+        session_id: UUID,
+        role: str,
+        content: str,
+        sources: list[dict[str, Any]] | None = None,
     ) -> MessageData:
-        msg = ChatMessageModel(session_id=session_id, role=role, content=content)
+        msg = ChatMessageModel(
+            session_id=session_id, role=role, content=content, sources=sources
+        )
         self.session.add(msg)
         await self.session.commit()
         await self.session.refresh(msg)

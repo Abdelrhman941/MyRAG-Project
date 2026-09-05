@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # ------------ API ------------
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # ------------ Chat Validation ------------
+    MAX_QUESTION_LENGTH: int = 8000
+
     # ------------ Retrieval ------------
     RETRIEVAL_TOP_K: Annotated[int, Field(gt=0)] = 8
     RETRIEVAL_HYBRID: bool = True

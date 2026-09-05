@@ -34,6 +34,7 @@ class MessageData(TypedDict):
     role: str
     content: str
     created_at: datetime
+    sources: list[dict[str, Any]] | None
 
 
 class VectorStorePort(Protocol):
@@ -118,7 +119,11 @@ class SessionRepositoryPort(Protocol):
         ...
 
     async def add_message(
-        self, session_id: UUID, role: str, content: str
+        self,
+        session_id: UUID,
+        role: str,
+        content: str,
+        sources: list[dict[str, Any]] | None = None,
     ) -> MessageData:
         """Add a message to the session."""
         ...

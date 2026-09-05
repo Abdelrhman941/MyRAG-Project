@@ -100,6 +100,14 @@ class DocumentProcessingConflictError(AppError):
     message = "Cannot delete a document while it is being processed."
 
 
+class InvalidDocumentStateError(AppError):
+    """Raised when attempting an operation on a document in an invalid state."""
+
+    status_code: int = 409
+    code: str = "invalid_document_state"
+    message: str = "Document is not in a valid state for this operation."
+
+
 class VectorStoreDeletionError(AppError):
     status_code = 502
     code = "vector_deletion_failed"
@@ -142,6 +150,7 @@ __all__ = [
     "DuplicateDocumentError",
     "EmptyQueryError",
     "FileTooLargeError",
+    "InvalidDocumentStateError",
     "LLMProviderError",
     "MissingFilenameError",
     "NotFoundError",
