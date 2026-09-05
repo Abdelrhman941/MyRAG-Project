@@ -2,6 +2,8 @@ import { DocumentManager } from '@/features/documents/document-manager';
 import { getDocuments } from '@/lib/api';
 import { notFound } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DocumentsPage({
   params,
 }: {

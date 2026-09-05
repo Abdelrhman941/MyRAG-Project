@@ -3,13 +3,15 @@
 import { deleteDocumentAction, getDocuments, retryDocumentAction } from '@/lib/api';
 import { useConfig } from '@/lib/config';
 import type { Document } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useDocumentStore } from './document-store';
 
 const EMPTY_DOCUMENTS: Document[] = [];
 const pollingRefs = new Map<string, number>();
-const pollingIntervals = new Map<string, ReturnType<typeof setInterval>>();
+const pollingIntervals = new Map<string, ReturnType<typeof setTimeout>>();
+const pollingStartTimes = new Map<string, number>();
 const documentRequests = new Map<string, Promise<Document[] | null>>();
 
 type BatchUploadResult = {
@@ -43,33 +45,39 @@ function refreshDocuments(sessionId: string): Promise<Document[] | null> {
 }
 
 function ensurePolling(sessionId: string) {
+  pollingStartTimes.set(sessionId, Date.now());
+
   if (pollingIntervals.has(sessionId)) return;
 
   const refCount = (pollingRefs.get(sessionId) ?? 0) + 1;
   pollingRefs.set(sessionId, refCount);
 
   if (refCount === 1) {
-    pollingIntervals.set(
-      sessionId,
-      setInterval(() => {
-        const docs = useDocumentStore.getState().documentsBySession[sessionId] ?? [];
-        const stillProcessing = docs.some(
-          (d) => d.status === 'processing' || d.status === 'uploaded'
-        );
-        if (!stillProcessing) {
-          const interval = pollingIntervals.get(sessionId);
-          if (interval) clearInterval(interval);
-          pollingIntervals.delete(sessionId);
-          pollingRefs.delete(sessionId);
-          return;
-        }
-        void refreshDocuments(sessionId).catch(() => {});
-      }, 3000)
-    );
+    const poll = () => {
+      const docs = useDocumentStore.getState().documentsBySession[sessionId] ?? [];
+      const stillProcessing = docs.some(
+        (d) => d.status === 'processing' || d.status === 'uploaded'
+      );
+      if (!stillProcessing) {
+        pollingIntervals.delete(sessionId);
+        pollingRefs.delete(sessionId);
+        pollingStartTimes.delete(sessionId);
+        return;
+      }
+      void refreshDocuments(sessionId).catch(() => {});
+
+      const startTime = pollingStartTimes.get(sessionId) ?? Date.now();
+      const elapsed = Date.now() - startTime;
+      const delay = elapsed < 15000 ? 1000 : 3000;
+      pollingIntervals.set(sessionId, setTimeout(poll, delay));
+    };
+
+    pollingIntervals.set(sessionId, setTimeout(poll, 1000));
   }
 }
 
 export function useDocuments(sessionId: string | null, initialDocuments?: Document[]) {
+  const router = useRouter();
   const config = useConfig();
   const documents = useDocumentStore((state) =>
     sessionId ? (state.documentsBySession[sessionId] ?? EMPTY_DOCUMENTS) : EMPTY_DOCUMENTS
@@ -115,9 +123,10 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
       }
 
       const interval = pollingIntervals.get(sessionId);
-      if (interval) clearInterval(interval);
+      if (interval) clearTimeout(interval);
       pollingIntervals.delete(sessionId);
       pollingRefs.delete(sessionId);
+      pollingStartTimes.delete(sessionId);
     };
   }, [sessionId]);
 
@@ -210,6 +219,7 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
         toast.success(
           confirmedDocuments.length === 1 ? 'Document uploaded successfully.' : 'Documents uploaded successfully.'
         );
+        router.refresh();
       }
 
       if (failedTemporaryIds.length) {
@@ -232,6 +242,7 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
     const result = await deleteDocumentAction(documentId, sessionId);
     if (result.success) {
       removeOptimistic(sessionId, documentId);
+      router.refresh();
       return true;
     }
 
@@ -255,6 +266,7 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
       } else {
         toast.success('Document re-queued for processing.');
         void refreshDocuments(sessionId!).catch(() => {});
+        router.refresh();
       }
     });
   };

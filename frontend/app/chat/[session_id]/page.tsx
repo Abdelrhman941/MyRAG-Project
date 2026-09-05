@@ -14,6 +14,8 @@ export async function generateMetadata({ params }: ChatSessionPageProps): Promis
   return { title: session?.title || 'Chat' };
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function ChatSessionPage({ params }: ChatSessionPageProps) {
   const resolvedParams = await params;
   const sessionId = resolvedParams.session_id;
