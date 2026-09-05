@@ -92,10 +92,11 @@ The application shell is divided into two primary structural areas:
 - **Reduced Motion**: Respect `prefers-reduced-motion` for any UI transitions.
 
 ## 14. Design System Rules
-- **Foundation**: `shadcn/ui` is the absolute primary foundation.
-- **Augmentation**: `21st.dev` blocks are used selectively and exclusively for high-value components (e.g., the prompt composer or message styling).
-- **Consistency**: Do not mix disparate visual patterns. Maintain strict consistency in typography, spacing, border radii, and interaction states.
-- **No Component Shopping**: Use what is available in the established stack; do not import external libraries without explicit justification.
+- **Foundation**: `shadcn/ui` built on `@base-ui/react` primitives is the sole component library.
+- **Styling**: Tailwind CSS v4 with `tw-animate-css` for CSS-native animations. `tailwind-merge` and `clsx` for class composition.
+- **Icons**: `lucide-react` exclusively.
+- **Consistency**: Maintain strict consistency in typography, spacing, border radii, and interaction states.
+- **No Component Shopping**: Do not import external UI libraries without explicit justification.
 
 ## 15. Performance Principles
 - **Client Requests**: Minimize redundant data fetching.
