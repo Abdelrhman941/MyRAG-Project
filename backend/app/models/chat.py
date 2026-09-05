@@ -63,3 +63,4 @@ class ChatMessage(BaseModel):
     role: str
     content: str
     created_at: datetime
+    sources: list[dict] | None = None

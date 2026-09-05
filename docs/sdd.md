@@ -91,7 +91,7 @@ Full detail: [diagrams/data-schema.md](diagrams/data-schema.md).
 **SQLite (SQLAlchemy + Alembic):**
 - `documents` ✅ implemented — id (UUID PK), original_file_name, content_hash (UNIQUE constraint), document_type, status, file_size_bytes, created_at, session_id
 - `chat_sessions` ✅ — id (UUID PK), title, summary (nullable), summarized_message_count (int), created_at, updated_at
-- `chat_messages` ✅ — id (UUID PK), session_id (FK → chat_sessions), role, content, sources (JSON, nullable), created_at
+- `chat_messages` ✅ — id (UUID PK), session_id (FK → chat_sessions), role, content, sources (JSON, nullable), created_at (Note: Both ORM and internal Pydantic models retain `sources`).
 
 **Qdrant:**
 - Collection `chunks` ✅ — dense vector (BGE-M3, 1024-dim) + sparse vector; payload: document_id, chunk_index, text, original_file_name
