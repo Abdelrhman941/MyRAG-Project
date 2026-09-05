@@ -452,10 +452,18 @@ export const AgentChat = memo(function AgentChat({
   const renderSuggestions = () => {
     if (!suggestedDocuments) return null;
 
-    let suggestions: string[] = [];
     if (suggestedDocuments.length === 0) {
-      suggestions = ["Upload documents in the Knowledge Base to get started"];
-    } else if (suggestedDocuments.length === 1) {
+      return (
+        <div className="flex justify-center mt-4">
+          <p className="text-sm text-muted-foreground text-center">
+            Upload documents in the Knowledge Base to get started
+          </p>
+        </div>
+      );
+    }
+
+    let suggestions: string[] = [];
+    if (suggestedDocuments.length === 1) {
       const file = suggestedDocuments[0];
       suggestions = [`Summarize ${file}`, `What are the key points in ${file}?`];
     } else {
