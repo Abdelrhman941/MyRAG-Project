@@ -5,6 +5,7 @@ import { ConfigProvider } from '@/lib/config';
 import { fetchAppConfig } from '@/lib/server-config';
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { SplashScreen } from './_components/splash-screen';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -43,6 +44,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       >
         <ThemeProvider>
           <ConfigProvider config={config}>
+            <SplashScreen />
             <TooltipProvider>{children}</TooltipProvider>
             <Toaster />
           </ConfigProvider>

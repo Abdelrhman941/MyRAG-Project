@@ -1,9 +1,5 @@
 'use client';
 
-import { Dancing_Script } from 'next/font/google';
-
-const cursiveFont = Dancing_Script({ subsets: ['latin'], weight: '700' });
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -293,9 +289,14 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
             height={40}
             className="size-10 shrink-0"
           />
-          <span className={`${cursiveFont.className} text-3xl font-bold tracking-wide ml-1 mb-1 text-foreground`}>
-            Nova
-          </span>
+          <div className="relative h-6 w-24 ml-1">
+            <Image
+              src="/images/logos/nova-text.webp"
+              alt="Nova"
+              fill
+              className="object-contain dark:invert"
+            />
+          </div>
         </div>
         <Tooltip>
           <TooltipTrigger

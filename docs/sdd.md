@@ -80,7 +80,7 @@ Full detail: [diagrams/component-design.md](diagrams/component-design.md).
 **Ingestion lifecycle:**
 `Upload → validate (type/size/rate) → stream to temp + SHA-256 → dedup check →
 DB record (status=uploaded) → move to final path → enqueue ARQ job → worker picks up → parse → chunk →
-embed (BGE-M3 dense+sparse) → upsert Qdrant → status=ready (or failed)`
+embed (BGE-M3 dense+sparse, CPU, max_length=CHUNK_SIZE_TOKENS, fp16=True, ONNX supported) → upsert Qdrant → status=ready (or failed)`
 
 ---
 
@@ -186,4 +186,5 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - BGE-M3 first load downloads ~2 GB and occupies ~2–3 GB RAM — lazy singleton implemented and pre-loaded on boot in both API server and workers.
 - SQLite is fine at MVP scale; the session repository port exists so it can be swapped.
 - No auth — MVP is single-user local. Do not expose beyond localhost.
+- **Recovery Sweep Safety:** A restart mid-ingestion re-enqueues documents (status `UPLOADED` or `PROCESSING`) even if a job was mid-flight. This is entirely safe because Qdrant point IDs are deterministic (`uuid5(document_id, chunk_index)`), making all upserts idempotent.
 - **Resolved Risk:** The "stuck forever in processing" risk class has been entirely eliminated by a 1-minute `stalled_watchdog` cron job.
