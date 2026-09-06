@@ -6,6 +6,7 @@ import { fetchAppConfig } from '@/lib/server-config';
 import type { Metadata, Viewport } from 'next';
 import { Geist_Mono, Inter } from 'next/font/google';
 import { SplashScreen } from './_components/splash-screen';
+import { ReadinessProvider } from '@/hooks/readiness-context';
 import './globals.css';
 
 const inter = Inter({
@@ -60,9 +61,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen bg-background text-foreground antialiased selection:bg-primary/20">
         <ThemeProvider>
           <ConfigProvider config={safeConfig}>
-            <SplashScreen />
-            <TooltipProvider>{children}</TooltipProvider>
-            <Toaster />
+            <ReadinessProvider>
+              <SplashScreen />
+              <TooltipProvider>{children}</TooltipProvider>
+              <Toaster />
+            </ReadinessProvider>
           </ConfigProvider>
         </ThemeProvider>
       </body>

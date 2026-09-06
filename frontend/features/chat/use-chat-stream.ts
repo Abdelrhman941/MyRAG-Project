@@ -101,17 +101,16 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
 
         if (event.type === 'done') {
           ensureAssistant();
-          setMessages((current) => {
-            // Revalidate sidebar only for the first exchange to fetch the auto-generated title
-            if (isFirstExchange) {
-              void revalidateSessionsAction().catch(() => {
-                // Fire-and-forget: sidebar will update on next navigation
-              });
-            }
-            return current.map((message) =>
+          setMessages((current) =>
+            current.map((message) =>
               message.clientId === assistantClientId ? { ...message, id: event.messageId } : message
-            );
-          });
+            )
+          );
+          if (isFirstExchange) {
+            void revalidateSessionsAction().catch(() => {
+              // Fire-and-forget: sidebar will update on next navigation
+            });
+          }
           return;
         }
 

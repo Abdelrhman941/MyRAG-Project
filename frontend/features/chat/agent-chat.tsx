@@ -360,7 +360,9 @@ const MessageList = memo(function MessageList({
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
 
     if (isNearBottom) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+      bottomRef.current.scrollIntoView({
+        behavior: status === 'streaming' ? 'auto' : 'smooth',
+      });
     }
   }, [messages, status, ragPhase]);
 

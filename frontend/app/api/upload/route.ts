@@ -37,6 +37,7 @@ export async function POST(req: Request) {
         'content-type': contentType,
       },
       body: req.body,
+      signal: req.signal,
       // Required by Node.js fetch when streaming a request body.
       // @ts-expect-error Node fetch requires duplex for streaming request bodies.
       duplex: 'half',

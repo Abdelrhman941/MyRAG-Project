@@ -81,8 +81,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     ):
         await app.state.vector_store.client.close()
 
-    if hasattr(app.state, "arq_pool"):
-        await app.state.arq_pool.close()
+    arq_pool = getattr(app.state, "arq_pool", None)
+    if arq_pool is not None:
+        await arq_pool.close()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

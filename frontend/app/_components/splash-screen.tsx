@@ -3,7 +3,8 @@
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { useReadiness, type ReadinessStatus } from '@/hooks/use-readiness';
+import { useReadinessState } from '@/hooks/readiness-context';
+import type { ReadinessStatus } from '@/hooks/use-readiness';
 
 const STATUS_MESSAGES: Record<ReadinessStatus, string> = {
   connecting: 'Connecting to the RAG server...',
@@ -14,7 +15,7 @@ const STATUS_MESSAGES: Record<ReadinessStatus, string> = {
 };
 
 export function SplashScreen() {
-  const { status, retry } = useReadiness();
+  const { status, retry } = useReadinessState();
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {

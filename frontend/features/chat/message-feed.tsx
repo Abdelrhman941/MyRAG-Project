@@ -1,7 +1,7 @@
 'use client';
 
 import { useDocuments } from '@/features/documents/use-documents';
-import { useReadiness } from '@/hooks/use-readiness';
+import { useReadinessState } from '@/hooks/readiness-context';
 import { useConfig } from '@/lib/config';
 import type { Document, Message } from '@/lib/types';
 import { useMemo, useRef } from 'react';
@@ -26,7 +26,7 @@ export function MessageFeed({
     initialDocuments
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { status: readinessStatus, detail: readinessDetail, retry } = useReadiness();
+  const { status: readinessStatus, detail: readinessDetail, retry } = useReadinessState();
 
   const modelReady = readinessStatus === 'ready';
   const modelError = readinessStatus === 'error' ? readinessDetail || 'Failed to load model' : null;

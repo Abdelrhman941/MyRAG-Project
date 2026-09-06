@@ -1,6 +1,8 @@
 import { getSessions, createSession } from '@/lib/api';
 import { redirect } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+
 export default async function IndexPage() {
   const sessions = await getSessions();
   if (sessions && sessions.length > 0) {

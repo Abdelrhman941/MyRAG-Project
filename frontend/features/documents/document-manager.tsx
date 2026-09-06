@@ -1,5 +1,6 @@
 'use client';
 
+import { parseUtcDate } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,7 +42,7 @@ function formatDate(dateString: string) {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(dateString));
+  }).format(parseUtcDate(dateString));
 }
 
 const BUSY_STATUSES: Document['status'][] = ['processing', 'uploaded', 'deleting'];

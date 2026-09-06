@@ -58,6 +58,20 @@ function relativeDate(value: string): string {
   return date.toLocaleDateString();
 }
 
+function useRelativeDate(value: string): string {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
+  return mounted ? relativeDate(value) : '';
+}
+
+function SessionDate({ value }: { value: string }) {
+  const label = useRelativeDate(value);
+  return <>{label}</>;
+}
+
 function FileTypeIcon({ document }: { document: Document }) {
   const extension = document.original_file_name.split('.').pop()?.toLowerCase();
   const Icon = extension === 'md' || extension === 'txt' ? FileCode2 : FileText;
@@ -177,7 +191,7 @@ function ChatList({
                       {session.title || 'New Chat'}
                     </span>
                     <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                      {relativeDate(session.updated_at || session.created_at)}
+                      <SessionDate value={session.updated_at || session.created_at} />
                     </span>
                   </div>
                 </SidebarMenuButton>
