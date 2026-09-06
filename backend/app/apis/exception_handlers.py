@@ -42,22 +42,26 @@ def _error_response(
     details: list[dict[str, Any]] | None = None,
     headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
-    """Build the standard API error response.
-
-    Uses request.state (not the logging contextvar) for request_id, since
-    request.state is available in all exception handlers.
-    """
-
-    error: dict[str, Any] = {"code": code, "message": message}
+    """Build the standard API error response."""
+    error: dict[str, Any] = {
+        "code": code,
+        "message": message,
+    }
 
     if details:
         error["details"] = details
 
-    request_id = getattr(request.state, "request_id", None)
+    request_id = getattr(
+        request.state,
+        "request_id",
+        None,
+    )
+
     if request_id:
         error["request_id"] = request_id
 
-    response_headers = dict(headers) if headers else {}
+    response_headers = dict(headers or {})
+
     if request_id:
         response_headers["x-request-id"] = request_id
 
@@ -70,51 +74,60 @@ def _error_response(
 
 def _get_http_error_code(status_code: int) -> str:
     """Return a stable API error code for an HTTP status."""
-
-    return HTTP_STATUS_ERROR_CODES.get(status_code, "http_error")
+    return HTTP_STATUS_ERROR_CODES.get(
+        status_code,
+        "http_error",
+    )
 
 
 def _safe_http_detail(detail: Any) -> str:
     """Return a safe client-facing HTTP error message."""
-
     if isinstance(detail, str):
         return detail
 
     return "An HTTP error occurred."
 
 
-async def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Normalize Starlette/FastAPI HTTP exceptions."""
-
-    http_exception = cast(StarletteHTTPException, exc)
+async def http_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Normalize Starlette and FastAPI HTTP exceptions."""
+    http_exception = cast(
+        StarletteHTTPException,
+        exc,
+    )
 
     if http_exception.status_code >= 500:
         logger.error(
-            "HTTP exception",
-            exc_info=http_exception,
-            extra={
-                "event": "api.http_exception",
-                "status_code": http_exception.status_code,
-                "path": request.url.path,
-                "method": request.method,
-            },
+            "%s %s -> HTTP %d",
+            request.method,
+            request.url.path,
+            http_exception.status_code,
         )
 
     return _error_response(
         request=request,
         status_code=http_exception.status_code,
-        code=_get_http_error_code(http_exception.status_code),
-        message=_safe_http_detail(http_exception.detail),
+        code=_get_http_error_code(
+            http_exception.status_code,
+        ),
+        message=_safe_http_detail(
+            http_exception.detail,
+        ),
         headers=http_exception.headers,
     )
 
 
 async def request_validation_exception_handler(
-    request: Request, exc: Exception
+    request: Request,
+    exc: Exception,
 ) -> JSONResponse:
-    """Translate request validation errors into a consistent response."""
-
-    validation_error = cast(RequestValidationError, exc)
+    """Normalize request validation failures."""
+    validation_error = cast(
+        RequestValidationError,
+        exc,
+    )
 
     details = [
         {
@@ -126,12 +139,9 @@ async def request_validation_exception_handler(
     ]
 
     logger.warning(
-        "Request validation failed",
-        extra={
-            "event": "api.validation_error",
-            "path": request.url.path,
-            "method": request.method,
-        },
+        "%s %s -> validation error",
+        request.method,
+        request.url.path,
     )
 
     return _error_response(
@@ -143,49 +153,25 @@ async def request_validation_exception_handler(
     )
 
 
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Return a safe response for unexpected failures.
-
-    No logging here — RequestLoggingMiddleware already logs the full
-    traceback with method/path/duration before this handler runs
-    (it sits inside the middleware, this handler runs in ServerErrorMiddleware,
-    outside it). Logging here too would duplicate every 500 in the logs.
-    """
-
-    return _error_response(
-        request=request,
-        status_code=500,
-        code="internal_server_error",
-        message="An unexpected error occurred.",
+async def app_error_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Normalize application-domain errors."""
+    app_error = cast(
+        AppError,
+        exc,
     )
 
+    log_method = logger.error if app_error.status_code >= 500 else logger.warning
 
-async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Normalize application-domain errors into the standard response."""
-
-    app_error = cast(AppError, exc)
-
-    if app_error.status_code >= 500:
-        logger.error(
-            "Application error",
-            exc_info=app_error,
-            extra={
-                "event": "api.app_error",
-                "status_code": app_error.status_code,
-                "path": request.url.path,
-                "method": request.method,
-            },
-        )
-    else:
-        logger.warning(
-            "Application error",
-            extra={
-                "event": "api.app_error",
-                "status_code": app_error.status_code,
-                "path": request.url.path,
-                "method": request.method,
-            },
-        )
+    log_method(
+        "%s %s -> %d: %s",
+        request.method,
+        request.url.path,
+        app_error.status_code,
+        app_error.message,
+    )
 
     return _error_response(
         request=request,
@@ -197,8 +183,17 @@ async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
-async def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Return the standard error shape for slowapi rate-limit violations."""
+async def rate_limit_exceeded_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Return the standard rate-limit response."""
+    logger.warning(
+        "%s %s -> HTTP 429",
+        request.method,
+        request.url.path,
+    )
+
     return _error_response(
         request=request,
         status_code=429,
@@ -207,14 +202,40 @@ async def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Return a safe response for unexpected server failures."""
+    return _error_response(
+        request=request,
+        status_code=500,
+        code="internal_server_error",
+        message="An unexpected error occurred.",
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
-    """Register all application-wide exception handlers."""
+    """Register application-wide exception handlers."""
     from slowapi.errors import RateLimitExceeded
 
-    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(
-        RequestValidationError, request_validation_exception_handler
+        RateLimitExceeded,
+        rate_limit_exceeded_handler,
     )
-    app.add_exception_handler(AppError, app_error_handler)
-    app.add_exception_handler(Exception, unhandled_exception_handler)
+    app.add_exception_handler(
+        StarletteHTTPException,
+        http_exception_handler,
+    )
+    app.add_exception_handler(
+        RequestValidationError,
+        request_validation_exception_handler,
+    )
+    app.add_exception_handler(
+        AppError,
+        app_error_handler,
+    )
+    app.add_exception_handler(
+        Exception,
+        unhandled_exception_handler,
+    )

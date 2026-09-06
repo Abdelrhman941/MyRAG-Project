@@ -1,13 +1,24 @@
-from datetime import datetime, UTC
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from ..core import DocumentStatus, DocumentType
 
 
+def _ensure_utc(value: datetime) -> datetime:
+    """Normalize naive datetimes to UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+
+    return value
+
+
 class DocumentResponse(BaseModel):
-    """Response schema for document metadata."""
+    """API representation of document metadata."""
 
     id: UUID
     session_id: UUID
@@ -19,12 +30,10 @@ class DocumentResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("created_at", mode="before")
-    @classmethod
-    def _ensure_utc(cls, v: datetime) -> datetime:
-        if isinstance(v, datetime) and v.tzinfo is None:
-            return v.replace(tzinfo=UTC)
-        return v
+    _normalize_created_at = field_validator(
+        "created_at",
+        mode="before",
+    )(_ensure_utc)
 
 
 class BatchUploadError(BaseModel):
@@ -35,24 +44,39 @@ class BatchUploadError(BaseModel):
 
 
 class BatchUploadResult(BaseModel):
-    """Outcome for a single file in a batch upload request.
-
-    Exactly one of ``document`` or ``error`` is set depending on ``ok``.
-    """
+    """Outcome for a single file in a batch upload."""
 
     filename: str
     ok: bool
     document: DocumentResponse | None = None
     error: BatchUploadError | None = None
 
+    @model_validator(mode="after")
+    def validate_outcome(self) -> Self:
+        """Ensure exactly one success/failure payload matches the status."""
+        has_document = self.document is not None
+        has_error = self.error is not None
+
+        if self.ok and (not has_document or has_error):
+            raise ValueError(
+                "Successful batch results must contain a document only.",
+            )
+
+        if not self.ok and (has_document or not has_error):
+            raise ValueError(
+                "Failed batch results must contain an error only.",
+            )
+
+        return self
+
 
 class BatchUploadResponse(BaseModel):
-    """Response for ``POST /api/v1/chat/sessions/{session_id}/documents/batch``."""
+    """Response for a batch document upload."""
 
     results: list[BatchUploadResult]
 
 
-__all__: list[str] = [
+__all__ = [
     "BatchUploadError",
     "BatchUploadResponse",
     "BatchUploadResult",

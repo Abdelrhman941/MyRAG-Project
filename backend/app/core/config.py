@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import tomllib
 from functools import cache
 from pathlib import Path
@@ -8,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .enums.environment import Environment
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]  # backend/
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _PYPROJECT_PATH = _PROJECT_ROOT / "pyproject.toml"
 _BYTES_PER_MB = 1024 * 1024
 
@@ -16,7 +18,10 @@ _BYTES_PER_MB = 1024 * 1024
 def _get_project_metadata() -> dict[str, Any]:
     if _PYPROJECT_PATH.exists():
         with _PYPROJECT_PATH.open("rb") as file:
-            return cast(dict[str, Any], tomllib.load(file).get("project", {}))
+            return cast(
+                dict[str, Any],
+                tomllib.load(file).get("project", {}),
+            )
 
     return {
         "name": "RAG-backend",
@@ -61,6 +66,7 @@ class Settings(BaseSettings):
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "chunks"
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    EMBEDDING_DIMENSION: Annotated[int, Field(gt=0)] = 1024
     EMBEDDING_BATCH_SIZE: Annotated[int, Field(gt=0)] = 16
 
     # ------------ ARQ / Background Jobs ------------
@@ -73,7 +79,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
     # ------------ Chat Validation ------------
-    MAX_QUESTION_LENGTH: int = 8000
+    MAX_QUESTION_LENGTH: Annotated[int, Field(gt=0)] = 8000
 
     # ------------ Retrieval ------------
     RETRIEVAL_TOP_K: Annotated[int, Field(gt=0)] = 8
@@ -82,25 +88,29 @@ class Settings(BaseSettings):
     QUERY_REWRITE_ENABLED: bool = False
 
     # ------------ Memory ------------
-    MEMORY_SHORT_TERM_N: int = 10
-    MEMORY_SUMMARY_EVERY_K: int = 6
+    MEMORY_SHORT_TERM_N: Annotated[int, Field(gt=0)] = 10
+    MEMORY_SUMMARY_EVERY_K: Annotated[int, Field(gt=0)] = 6
 
     # ------------ LLM Generation ------------
     LLM_BASE_URL: str = "https://api.groq.com/openai/v1"
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "llama-3.3-70b-versatile"
-    LLM_CONTEXT_TOKEN_BUDGET: int = 6000
-    LLM_TIMEOUT_S: int = 60
-    LLM_MAX_RETRIES: int = 3
-
-    @model_validator(mode="after")
-    def _ensure_upload_dir(self) -> "Settings":
-        self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        return self
+    LLM_CONTEXT_TOKEN_BUDGET: Annotated[int, Field(gt=0)] = 6000
+    LLM_TIMEOUT_S: Annotated[int, Field(gt=0)] = 60
+    LLM_MAX_RETRIES: Annotated[int, Field(gt=0)] = 3
 
     @property
     def max_file_size_bytes(self) -> int:
+        """Return the configured maximum file size in bytes."""
         return self.MAX_FILE_SIZE_MB * _BYTES_PER_MB
+
+    @model_validator(mode="after")
+    def _require_llm_key_outside_local(self) -> Settings:
+        if self.ENVIRONMENT is not Environment.LOCAL and not self.LLM_API_KEY.strip():
+            raise ValueError(
+                "LLM_API_KEY must be configured outside the LOCAL environment."
+            )
+        return self
 
 
 @cache

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging
@@ -11,7 +13,11 @@ from fastapi import BackgroundTasks
 from ..core import Settings
 from ..core.exceptions import AppError
 from ..generation.prompt_builder import PromptBuilder
-from ..infrastructure.ports import LLMProviderPort, SessionData, SessionRepositoryPort
+from ..infrastructure.ports import (
+    LLMProviderPort,
+    SessionData,
+    SessionRepositoryPort,
+)
 from ..memory.manager import MemoryManager
 from ..models.chat import ChatMessage
 from ..retrieval.service import RetrievalService
@@ -21,13 +27,15 @@ logger = logging.getLogger(__name__)
 
 
 class ChatService:
+    """Orchestrate retrieval, generation, memory, and chat persistence."""
+
     def __init__(
         self,
         repository: SessionRepositoryPort,
         retrieval_service: RetrievalService,
         llm: LLMProviderPort,
         settings: Settings,
-    ):
+    ) -> None:
         self.repository = repository
         self.retrieval_service = retrieval_service
         self.llm = llm
@@ -36,9 +44,12 @@ class ChatService:
         self.prompt_builder = PromptBuilder(settings)
 
     async def _prepare(
-        self, session_id: UUID, session: SessionData, question: str
+        self,
+        session_id: UUID,
+        session: SessionData,
+        question: str,
     ) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
-
+        """Prepare history, retrieval context, and generation messages."""
         history = await self.memory.load_short_term(session_id)
 
         if history and history[-1].role == "user":
@@ -46,23 +57,35 @@ class ChatService:
 
         summary = session.get("summary")
 
-        # 3. Rewrite query (optional)
         search_query = question
+
         if self.settings.QUERY_REWRITE_ENABLED:
             rewrite_prompt = self.prompt_builder.build_query_rewrite_prompt(
-                summary, history[-2:] if len(history) >= 2 else history, question
+                summary,
+                history[-2:] if len(history) >= 2 else history,
+                question,
             )
+
             try:
-                rewritten = await self.llm.generate(rewrite_prompt, temperature=0.0)
+                rewritten = await self.llm.generate(
+                    rewrite_prompt,
+                    temperature=0.0,
+                )
+
                 if rewritten and rewritten.strip():
                     search_query = rewritten.strip()
-            except Exception as e:
-                logger.warning(f"Query rewrite failed, falling back to original: {e}")
 
-        # 4. Retrieve Chunks
-        chunks = await self.retrieval_service.retrieve(search_query, session_id)
+            except Exception as exc:
+                logger.warning(
+                    "Query rewrite failed; using original question: %s",
+                    exc,
+                )
 
-        # 5. Build prompt
+        chunks = await self.retrieval_service.retrieve(
+            search_query,
+            session_id,
+        )
+
         messages, used_sources = self.prompt_builder.build_chat_prompt(
             summary=summary,
             chunks=chunks,
@@ -70,39 +93,55 @@ class ChatService:
             question=question,
             memory_manager=self.memory,
         )
+
         return messages, used_sources
 
     async def _post_answer(
         self,
         session_id: UUID,
-        session: dict[str, Any] | SessionData,
+        session: SessionData,
         question: str,
         answer_text: str,
         used_sources: list[dict[str, Any]],
         background_tasks: BackgroundTasks,
     ) -> tuple[Any, list[SourceCitation]]:
-        msg = await self.repository.add_message(
-            session_id, "assistant", answer_text, sources=used_sources or None
+        """Persist an assistant answer and schedule memory tasks."""
+        message = await self.repository.add_message(
+            session_id,
+            "assistant",
+            answer_text,
+            sources=used_sources or None,
         )
 
-        msg_count = await self.repository.count_messages(session_id)
-        if self.memory.should_update_summary(msg_count):
-            background_tasks.add_task(self._update_summary, session_id)
+        message_count = await self.repository.count_messages(
+            session_id,
+        )
 
-        if msg_count == 2 and not session.get("title"):
-            background_tasks.add_task(self._generate_title, session_id, question)
+        if self.memory.should_update_summary(message_count):
+            background_tasks.add_task(
+                self._update_summary,
+                session_id,
+            )
+
+        if message_count == 2 and not session.get("title"):
+            background_tasks.add_task(
+                self._generate_title,
+                session_id,
+                question,
+            )
 
         sources = [
             SourceCitation(
-                document_id=s["document_id"],
-                original_file_name=s["original_file_name"],
-                chunk_index=s["chunk_index"],
-                page_number=s.get("page_number"),
-                section=s.get("section"),
+                document_id=source["document_id"],
+                original_file_name=source["original_file_name"],
+                chunk_index=source["chunk_index"],
+                page_number=source.get("page_number"),
+                section=source.get("section"),
             )
-            for s in used_sources
+            for source in used_sources
         ]
-        return msg, sources
+
+        return message, sources
 
     async def answer(
         self,
@@ -111,17 +150,41 @@ class ChatService:
         question: str,
         background_tasks: BackgroundTasks,
     ) -> ChatAnswer:
-        await self.repository.add_message(session_id, "user", question)
-
-        messages, used_sources = await self._prepare(session_id, session, question)
-        raw_answer_text = await self.llm.generate(messages)
-        answer_text = self._filter_citations_text(raw_answer_text, len(used_sources))
-
-        _, sources = await self._post_answer(
-            session_id, session, question, answer_text, used_sources, background_tasks
+        """Generate and persist a complete assistant answer."""
+        await self.repository.add_message(
+            session_id,
+            "user",
+            question,
         )
 
-        return ChatAnswer(answer=answer_text, sources=sources)
+        messages, used_sources = await self._prepare(
+            session_id,
+            session,
+            question,
+        )
+
+        raw_answer_text = await self.llm.generate(
+            messages,
+        )
+
+        answer_text = self._filter_citations_text(
+            raw_answer_text,
+            len(used_sources),
+        )
+
+        _, sources = await self._post_answer(
+            session_id,
+            session,
+            question,
+            answer_text,
+            used_sources,
+            background_tasks,
+        )
+
+        return ChatAnswer(
+            answer=answer_text,
+            sources=sources,
+        )
 
     async def answer_stream(
         self,
@@ -130,40 +193,60 @@ class ChatService:
         question: str,
         background_tasks: BackgroundTasks,
     ) -> AsyncGenerator[dict[str, Any], None]:
-        """Async generator yielding stream events for the SSE endpoint."""
+        """Stream assistant events using the LLM provider."""
+        answer_text = ""
+
         try:
-            await self.repository.add_message(session_id, "user", question)
-            # We want to yield ping while preparing if it's slow, but _prepare
-            # isn't a generator. To do that, we could run _prepare in a task
-            # and yield ping while waiting. But for simplicity let's just await it:
-            messages, used_sources = await self._prepare(session_id, session, question)
+            await self.repository.add_message(
+                session_id,
+                "user",
+                question,
+            )
+
+            messages, used_sources = await self._prepare(
+                session_id,
+                session,
+                question,
+            )
 
             sources = [
                 {
-                    "document_id": s["document_id"],
-                    "original_file_name": s["original_file_name"],
-                    "chunk_index": s["chunk_index"],
-                    "page_number": s.get("page_number"),
-                    "section": s.get("section"),
+                    "document_id": source["document_id"],
+                    "original_file_name": source["original_file_name"],
+                    "chunk_index": source["chunk_index"],
+                    "page_number": source.get("page_number"),
+                    "section": source.get("section"),
                 }
-                for s in used_sources
+                for source in used_sources
             ]
-            yield {"event": "sources", "data": sources}
 
-            answer_text = ""
+            yield {
+                "event": "sources",
+                "data": sources,
+            }
 
-            async def token_generator() -> AsyncGenerator[dict[str, Any], None]:
-                async for t in self.llm.generate_stream(messages):
-                    yield {"event": "token", "data": {"text": t}}
+            async def token_generator() -> AsyncGenerator[
+                dict[str, Any],
+                None,
+            ]:
+                async for token in self.llm.generate_stream(
+                    messages,
+                ):
+                    yield {
+                        "event": "token",
+                        "data": {"text": token},
+                    }
 
             async for event in self._filter_citations_stream(
-                token_generator(), len(used_sources)
+                token_generator(),
+                len(used_sources),
             ):
                 yield event
+
                 if event["event"] == "token":
                     answer_text += event["data"]["text"]
 
-            msg, _ = await self._post_answer(
+            message, _ = await self._post_answer(
                 session_id,
                 session,
                 question,
@@ -174,21 +257,31 @@ class ChatService:
 
             yield {
                 "event": "done",
-                "data": {"message_id": str(msg["id"]), "finish": "stop"},
+                "data": {
+                    "message_id": str(message["id"]),
+                    "finish": "stop",
+                },
             }
 
         except asyncio.CancelledError:
-            # Client disconnected mid-stream. Best effort save:
-            if "answer_text" in locals() and answer_text:
+            if answer_text:
                 with contextlib.suppress(Exception):
                     await self.repository.add_message(
-                        session_id, "assistant", answer_text
+                        session_id,
+                        "assistant",
+                        answer_text,
                     )
             raise
-        except Exception as e:
-            # Catch LLM errors or other errors
-            if isinstance(e, AppError):
-                yield {"event": "error", "data": {"code": e.code, "message": e.message}}
+
+        except Exception as exc:
+            if isinstance(exc, AppError):
+                yield {
+                    "event": "error",
+                    "data": {
+                        "code": exc.code,
+                        "message": exc.message,
+                    },
+                }
             else:
                 yield {
                     "event": "error",
@@ -198,16 +291,30 @@ class ChatService:
                     },
                 }
 
-            if "answer_text" in locals() and answer_text:
+            if answer_text:
                 with contextlib.suppress(Exception):
                     await self.repository.add_message(
-                        session_id, "assistant", answer_text
+                        session_id,
+                        "assistant",
+                        answer_text,
                     )
-            logger.exception(f"Streaming error for session {session_id}")
 
-    async def _generate_title(self, session_id: UUID, first_question: str) -> None:
+            logger.exception(
+                "Streaming error for session %s",
+                session_id,
+            )
+
+    async def _generate_title(
+        self,
+        session_id: UUID,
+        first_question: str,
+    ) -> None:
+        """Generate a concise title for a new chat session."""
         try:
-            session = await self.repository.get_session(session_id)
+            session = await self.repository.get_session(
+                session_id,
+            )
+
             if not session or session.get("title"):
                 return
 
@@ -215,75 +322,130 @@ class ChatService:
                 {
                     "role": "system",
                     "content": (
-                        "You are an assistant that creates a concise 3-6 word "
-                        "title for a chat based on the user's first message. "
-                        "Output ONLY the title, no quotes, no extra text."
+                        "You create a concise 3-6 word title for a chat "
+                        "based on the user's first message. "
+                        "Output only the title."
                     ),
                 },
-                {"role": "user", "content": first_question},
+                {
+                    "role": "user",
+                    "content": first_question,
+                },
             ]
-            title = await self.llm.generate(messages, temperature=0.5)
-            title = title.strip("\"'")
-            await self.repository.update_title(session_id, title)
-        except Exception as e:
-            logger.error(f"Failed to generate session title for {session_id}: {e}")
-            await self.repository.update_title(session_id, first_question[:60])
 
-    async def _update_summary(self, session_id: UUID) -> None:
+            title = await self.llm.generate(
+                messages,
+                temperature=0.5,
+            )
+
+            title = title.strip("\"'")
+
+            await self.repository.update_title(
+                session_id,
+                title,
+            )
+
+        except Exception as exc:
+            logger.error(
+                "Failed to generate session title for %s: %s",
+                session_id,
+                exc,
+            )
+
+            with contextlib.suppress(Exception):
+                await self.repository.update_title(
+                    session_id,
+                    first_question[:60],
+                )
+
+    async def _update_summary(
+        self,
+        session_id: UUID,
+    ) -> None:
+        """Update the running conversation summary."""
         try:
-            session = await self.repository.get_session(session_id)
+            session = await self.repository.get_session(
+                session_id,
+            )
+
             if not session:
                 return
 
-            total_count = await self.repository.count_messages(session_id)
-            summarized_count = session.get("summarized_message_count", 0)
+            total_count = await self.repository.count_messages(
+                session_id,
+            )
+
+            summarized_count = session.get(
+                "summarized_message_count",
+                0,
+            )
+
             short_term_n = self.settings.MEMORY_SHORT_TERM_N
 
             end_index = total_count - short_term_n
+
             if end_index <= summarized_count:
                 return
 
             limit = end_index - summarized_count
             offset = summarized_count
 
-            recent_msgs_raw = await self.repository.get_messages(
-                session_id, offset=offset, limit=limit
+            recent_messages_raw = await self.repository.get_messages(
+                session_id,
+                offset=offset,
+                limit=limit,
             )
-            if not recent_msgs_raw:
+
+            if not recent_messages_raw:
                 return
 
-            recent_msgs = [ChatMessage.model_validate(m) for m in recent_msgs_raw]
+            recent_messages = [
+                ChatMessage.model_validate(message) for message in recent_messages_raw
+            ]
 
             previous_summary = session.get("summary")
 
             messages = self.prompt_builder.build_summary_prompt(
-                previous_summary, recent_msgs
+                previous_summary,
+                recent_messages,
             )
-            new_summary = await self.llm.generate(messages, temperature=0.3)
 
-            await self.repository.update_summary(session_id, new_summary, end_index)
-        except Exception as e:
-            logger.error(f"Failed to update session summary for {session_id}: {e}")
+            new_summary = await self.llm.generate(
+                messages,
+                temperature=0.3,
+            )
 
-    def _filter_citations_text(self, text: str, max_sources: int) -> str:
-        """Strip [n] citations from the text if n > max_sources."""
+            await self.repository.update_summary(
+                session_id,
+                new_summary,
+                end_index,
+            )
 
+        except Exception as exc:
+            logger.error(
+                "Failed to update session summary for %s: %s",
+                session_id,
+                exc,
+            )
+
+    def _filter_citations_text(
+        self,
+        text: str,
+        max_sources: int,
+    ) -> str:
+        """Strip out-of-range source citations from a complete response."""
         return re.sub(
             r"\[(\d+)\]",
-            lambda m: m.group(0) if int(m.group(1)) <= max_sources else "",
+            lambda match: match.group(0) if int(match.group(1)) <= max_sources else "",
             text,
         )
 
     async def _filter_citations_stream(
-        self, stream: AsyncGenerator[dict[str, Any], None], max_sources: int
+        self,
+        stream: AsyncGenerator[dict[str, Any], None],
+        max_sources: int,
     ) -> AsyncGenerator[dict[str, Any], None]:
-        """
-        Intercept the token stream and buffer partially formed citations [n].
-        This ensures the UI never receives an out-of-bounds citation like [12]
-        if max_sources is 2.
-        Wait, stream yields `{"event": "token", "data": {"text": "..."}}`.
-        """
-
+        """Filter out-of-range citations while preserving streaming."""
         buffer = ""
 
         async for event in stream:
@@ -294,36 +456,58 @@ class ChatService:
             token = event["data"]["text"]
             buffer += token
 
-            # Keep yielding while there's no `[` or we know it's not a citation
             while buffer:
-                idx = buffer.find("[")
-                if idx == -1:
-                    yield {"event": "token", "data": {"text": buffer}}
+                index = buffer.find("[")
+
+                if index == -1:
+                    yield {
+                        "event": "token",
+                        "data": {"text": buffer},
+                    }
                     buffer = ""
                     break
 
-                if idx > 0:
-                    yield {"event": "token", "data": {"text": buffer[:idx]}}
-                    buffer = buffer[idx:]
+                if index > 0:
+                    yield {
+                        "event": "token",
+                        "data": {"text": buffer[:index]},
+                    }
+                    buffer = buffer[index:]
 
-                end_idx = buffer.find("]")
-                if end_idx != -1:
-                    citation = buffer[: end_idx + 1]
-                    buffer = buffer[end_idx + 1 :]
+                end_index = buffer.find("]")
 
-                    match = re.match(r"^\[(\d+)\]$", citation)
+                if end_index != -1:
+                    citation = buffer[: end_index + 1]
+                    buffer = buffer[end_index + 1 :]
+
+                    match = re.match(
+                        r"^\[(\d+)\]$",
+                        citation,
+                    )
+
                     if match:
                         if int(match.group(1)) <= max_sources:
-                            yield {"event": "token", "data": {"text": citation}}
+                            yield {
+                                "event": "token",
+                                "data": {"text": citation},
+                            }
                     else:
-                        yield {"event": "token", "data": {"text": citation}}
+                        yield {
+                            "event": "token",
+                            "data": {"text": citation},
+                        }
+
+                elif len(buffer) > 6:
+                    yield {
+                        "event": "token",
+                        "data": {"text": buffer[0]},
+                    }
+                    buffer = buffer[1:]
                 else:
-                    if len(buffer) > 6:
-                        # Flush the '[' if it's too long to be a citation like '[123456'
-                        yield {"event": "token", "data": {"text": buffer[0]}}
-                        buffer = buffer[1:]
-                    else:
-                        break
+                    break
 
         if buffer:
-            yield {"event": "token", "data": {"text": buffer}}
+            yield {
+                "event": "token",
+                "data": {"text": buffer},
+            }

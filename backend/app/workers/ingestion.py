@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID
 
 import arq
@@ -12,17 +12,29 @@ from arq.connections import RedisSettings
 from sqlalchemy import select
 
 from ..core import DocumentStatus, get_settings
-from ..core.exceptions import PermanentIngestionError, TransientIngestionError
+from ..core.exceptions import (
+    PermanentIngestionError,
+    TransientIngestionError,
+)
 from ..embeddings import get_embedding_model
 from ..infrastructure import DocumentStorage, build_vector_store
-from ..infrastructure.db.session import get_session_maker
+from ..infrastructure.db.session import (
+    dispose_engine,
+    get_session_maker,
+)
 from ..models import Document
-from ..services.ingestion_service import IngestionService
+from ..services.ingestion_service import (
+    IngestionService,
+    fail_document,
+)
 
 logger = logging.getLogger(__name__)
 
 
-async def ingest_document(ctx: dict[str, Any], document_id: str) -> None:
+async def ingest_document(
+    ctx: dict[str, Any],
+    document_id: str,
+) -> None:
     """Execute the ingestion pipeline for one document."""
     settings = get_settings()
     session_maker = get_session_maker()
@@ -31,7 +43,7 @@ async def ingest_document(ctx: dict[str, Any], document_id: str) -> None:
     vector_store = ctx["vector_store"]
 
     try:
-        doc_uuid = UUID(document_id)
+        document_uuid = UUID(document_id)
     except ValueError:
         logger.error(
             "Invalid document ID received by ingestion worker: %s",
@@ -51,15 +63,15 @@ async def ingest_document(ctx: dict[str, Any], document_id: str) -> None:
             logger.info(
                 "Starting ingestion for document %s",
                 document_id,
-                extra={"event": "ingestion.started"},
             )
 
-            await service.ingest(doc_uuid)
+            await service.ingest(
+                document_uuid,
+            )
 
             logger.info(
                 "Ingestion job completed for document %s",
                 document_id,
-                extra={"event": "ingestion.completed"},
             )
 
         except TransientIngestionError as exc:
@@ -68,20 +80,25 @@ async def ingest_document(ctx: dict[str, Any], document_id: str) -> None:
 
             if job_try >= max_tries:
                 logger.error(
-                    "Document %s exhausted retries (%d/%d): %s",
+                    "Ingestion retries exhausted for document %s (%d/%d): %s",
                     document_id,
                     job_try,
                     max_tries,
                     exc.reason,
-                    extra={
-                        "event": "ingestion.retry_exhausted",
-                        "reason": exc.reason,
-                    },
                 )
 
-                doc = await db.get(Document, doc_uuid)
-                if doc is not None:
-                    await service.fail_document(doc, exc.reason)
+                document = await db.get(
+                    Document,
+                    document_uuid,
+                )
+
+                if document is not None:
+                    await fail_document(
+                        db,
+                        vector_store,
+                        document,
+                        exc.reason,
+                    )
 
                 return
 
@@ -91,11 +108,6 @@ async def ingest_document(ctx: dict[str, Any], document_id: str) -> None:
                 job_try,
                 max_tries,
                 exc.reason,
-                extra={
-                    "event": "ingestion.retry",
-                    "reason": exc.reason,
-                    "job_try": job_try,
-                },
             )
 
             raise Retry() from exc
@@ -105,26 +117,39 @@ async def ingest_document(ctx: dict[str, Any], document_id: str) -> None:
                 "Permanent ingestion error for document %s: %s",
                 document_id,
                 exc.reason,
-                extra={
-                    "event": "ingestion.permanent_error",
-                    "reason": exc.reason,
-                },
             )
 
-            doc = await db.get(Document, doc_uuid)
-            if doc is not None:
-                await service.fail_document(doc, exc.reason)
+            document = await db.get(
+                Document,
+                document_uuid,
+            )
+
+            if document is not None:
+                await fail_document(
+                    db,
+                    vector_store,
+                    document,
+                    exc.reason,
+                )
 
         except Exception:
             logger.exception(
                 "Unexpected ingestion error for document %s",
                 document_id,
-                extra={"event": "ingestion.unexpected_error"},
             )
 
-            doc = await db.get(Document, doc_uuid)
-            if doc is not None:
-                await service.fail_document(doc, "internal_error")
+            document = await db.get(
+                Document,
+                document_uuid,
+            )
+
+            if document is not None:
+                await fail_document(
+                    db,
+                    vector_store,
+                    document,
+                    "internal_error",
+                )
 
 
 async def on_startup(ctx: dict[str, Any]) -> None:
@@ -135,16 +160,14 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     ctx["vector_store"] = build_vector_store(settings)
 
     logger.info("Warming up embedding model")
+
     await asyncio.to_thread(
         get_embedding_model,
         settings.EMBEDDING_MODEL,
     )
-    logger.info(
-        "Embedding model warmed up",
-        extra={"event": "embedding.model_ready"},
-    )
 
-    logger.info("Starting recovery sweep")
+    logger.info("Embedding model ready")
+    logger.info("Starting ingestion recovery sweep")
 
     session_maker = get_session_maker()
 
@@ -162,13 +185,14 @@ async def on_startup(ctx: dict[str, Any]) -> None:
         documents = result.scalars().all()
 
         if not documents:
-            logger.info("Recovery sweep found no unfinished documents")
+            logger.info(
+                "Recovery sweep found no unfinished documents",
+            )
             return
 
         logger.warning(
             "Recovery sweep found %d unfinished document(s)",
             len(documents),
-            extra={"event": "ingestion.recovery_started"},
         )
 
         redis = ctx["redis"]
@@ -184,12 +208,8 @@ async def on_startup(ctx: dict[str, Any]) -> None:
         await db.commit()
 
         logger.info(
-            "Recovery sweep completed for %d document(s)",
+            "Recovery sweep requeued %d document(s)",
             len(documents),
-            extra={
-                "event": "ingestion.recovery_completed",
-                "recovered_count": len(documents),
-            },
         )
 
 
@@ -198,31 +218,45 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
     logger.info("Worker shutdown started")
 
     vector_store = ctx.get("vector_store")
-    if vector_store is None:
-        logger.info("Worker shutdown complete")
-        return
 
-    client = getattr(vector_store, "client", None)
-    close = getattr(client, "close", None)
+    if vector_store is not None:
+        client = getattr(
+            vector_store,
+            "client",
+            None,
+        )
+        close = getattr(
+            client,
+            "close",
+            None,
+        )
 
-    if close is not None:
-        try:
-            result = close()
-            if result is not None:
-                await result
-        except Exception:
-            logger.exception("Failed to close worker vector store client")
+        if close is not None:
+            try:
+                result = close()
+
+                if result is not None:
+                    await result
+
+            except Exception:
+                logger.exception(
+                    "Failed to close worker vector store client",
+                )
+
+    await dispose_engine()
 
     logger.info("Worker shutdown complete")
 
 
-async def stalled_watchdog(ctx: dict[str, Any]) -> None:
-    """Fail documents that remained processing beyond the timeout."""
+async def stalled_watchdog(
+    ctx: dict[str, Any],
+) -> None:
+    """Fail documents stuck in processing beyond the timeout."""
     settings = get_settings()
     session_maker = get_session_maker()
 
     threshold = datetime.now(UTC) - timedelta(
-        seconds=settings.INGESTION_JOB_TIMEOUT_S + 60
+        seconds=settings.INGESTION_JOB_TIMEOUT_S + 60,
     )
 
     async with session_maker() as db:
@@ -237,24 +271,17 @@ async def stalled_watchdog(ctx: dict[str, Any]) -> None:
         if not documents:
             return
 
-        service = IngestionService(
-            db,
-            None,  # type: ignore[arg-type]
-            None,  # type: ignore[arg-type]
-            settings,
-        )
+        vector_store = ctx["vector_store"]
 
         for document in documents:
             logger.warning(
-                "Watchdog failing stalled document %s",
+                "Watchdog marking stalled document as failed: %s",
                 document.id,
-                extra={
-                    "event": "ingestion.stalled",
-                    "document_id": str(document.id),
-                },
             )
 
-            await service.fail_document(
+            await fail_document(
+                db,
+                vector_store,
                 document,
                 "stalled",
             )
@@ -266,9 +293,20 @@ settings = get_settings()
 class WorkerSettings:
     """ARQ worker configuration."""
 
-    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
-    functions = [ingest_document]  # noqa: RUF012
-    cron_jobs = [arq.cron(stalled_watchdog, minute=set(range(60)))]  # noqa: RUF012
+    redis_settings = RedisSettings.from_dsn(
+        settings.REDIS_URL,
+    )
+
+    functions: ClassVar[list[Any]] = [
+        ingest_document,
+    ]
+
+    cron_jobs: ClassVar[list[Any]] = [
+        arq.cron(
+            stalled_watchdog,
+            minute=set(range(60)),
+        ),
+    ]
 
     on_startup = on_startup
     on_shutdown = on_shutdown

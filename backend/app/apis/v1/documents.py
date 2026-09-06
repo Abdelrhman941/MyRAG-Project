@@ -1,7 +1,8 @@
-import logging
+from __future__ import annotations
+
 from uuid import UUID
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter
 
 from ...core import DocumentStatus
 from ...core.exceptions import InvalidDocumentStateError, NotFoundError
@@ -13,21 +14,22 @@ from ...dependencies import (
 from ...models import Document
 from ...schemas import DocumentResponse
 
-logger = logging.getLogger(__name__)
-
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(
+    prefix="/documents",
+    tags=["documents"],
+)
 
 
 @router.delete(
     "/{document_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=204,
     summary="Delete a document",
 )
 async def delete_document(
     document_id: UUID,
     doc_service: DocumentServiceDep,
 ) -> None:
-    """Delete a document entirely (vectors, file, and DB record)."""
+    """Delete a document and all associated data."""
     await doc_service.delete_document(document_id)
 
 
@@ -40,34 +42,34 @@ async def retry_document(
     document_id: UUID,
     db: SessionDep,
     arq_pool: ArqPoolDep,
-    request: Request,
 ) -> DocumentResponse:
-    """Reset a failed document to 'uploaded' and re-enqueue for ingestion."""
-    doc = await db.get(Document, document_id)
-    if not doc:
-        raise NotFoundError(message=f"Document {document_id} not found")
+    """Reset a failed document and enqueue it for ingestion."""
+    document = await db.get(
+        Document,
+        document_id,
+    )
 
-    if doc.status != DocumentStatus.FAILED:
+    if document is None:
+        raise NotFoundError(
+            message=f"Document {document_id} not found",
+        )
+
+    if document.status != DocumentStatus.FAILED:
         raise InvalidDocumentStateError(
             message=(
                 "Document must be in 'failed' state to retry. "
-                f"Current state: '{doc.status.value}'."
-            )
+                f"Current state: '{document.status.value}'."
+            ),
         )
 
-    if request.app.state.arq_pool is None:
-        from ...core.exceptions import AppError
+    document.status = DocumentStatus.UPLOADED
 
-        raise AppError(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="queue_unavailable",
-            message="Background processing queue is unavailable.",
-        )
-
-    doc.status = DocumentStatus.UPLOADED
     await db.commit()
-    await db.refresh(doc)
+    await db.refresh(document)
 
-    await arq_pool.enqueue_job("ingest_document", str(doc.id))
+    await arq_pool.enqueue_job(
+        "ingest_document",
+        str(document.id),
+    )
 
-    return DocumentResponse.model_validate(doc)
+    return DocumentResponse.model_validate(document)
