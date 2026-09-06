@@ -1,13 +1,11 @@
 SHELL := /bin/bash
+
 .ONESHELL:
 .SHELLFLAGS := -eu -o pipefail -c
-.RECIPEPREFIX := >
+.SILENT:
 
 .DEFAULT_GOAL := help
 
-# ------------------------------------------------------------------------------
-# Project Configuration
-# ------------------------------------------------------------------------------
 
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
@@ -15,28 +13,23 @@ FRONTEND_DIR := frontend
 BACKEND_PORT := 8000
 FRONTEND_PORT := 3000
 
-# Prefer the native Docker CLI, with docker.exe as a WSL/Docker Desktop fallback.
-DOCKER := $(shell \
-	if command -v docker >/dev/null 2>&1; then \
-		echo docker; \
-	elif command -v docker.exe >/dev/null 2>&1; then \
-		echo docker.exe; \
-	else \
-		echo docker; \
-	fi \
-)
+RUN_DIR := .run
+BACKEND_PID_FILE := $(RUN_DIR)/backend.pid
+WORKER_PID_FILE := $(RUN_DIR)/worker.pid
 
-# ------------------------------------------------------------------------------
-# Phony Targets
-# ------------------------------------------------------------------------------
+DOCKER := docker
+
 
 .PHONY: \
 	help \
 	check-docker \
 	infra-up \
 	infra-down \
+	db-migrate \
 	back-up \
 	back-down \
+	worker-up \
+	worker-down \
 	front-up \
 	front-down \
 	down \
@@ -56,239 +49,288 @@ DOCKER := $(shell \
 	ci \
 	clean
 
-# ------------------------------------------------------------------------------
-# Help
-# ------------------------------------------------------------------------------
 
 help:
-> @printf '%s\n' \
-> 	'Project commands:' \
-> 	'' \
-> 	'  Infrastructure' \
-> 	'    make infra-up          Start Qdrant and Redis' \
-> 	'    make infra-down        Stop Qdrant and Redis' \
-> 	'' \
-> 	'  Development' \
-> 	'    make back-up           Start infrastructure + backend' \
-> 	'    make back-down         Stop backend on port $(BACKEND_PORT)' \
-> 	'    make front-up          Start frontend' \
-> 	'    make front-down        Stop frontend on port $(FRONTEND_PORT)' \
-> 	'    make down              Stop backend, frontend, and infrastructure' \
-> 	'' \
-> 	'  Dependencies' \
-> 	'    make sync              Sync backend + frontend dependencies' \
-> 	'    make backend-sync      Sync Python dependencies from uv.lock' \
-> 	'    make backend-lock      Resolve/update uv.lock explicitly' \
-> 	'    make frontend-sync     Install frontend dependencies from lockfile' \
-> 	'' \
-> 	'  Quality' \
-> 	'    make backend-fix       Auto-fix Ruff issues and format backend' \
-> 	'    make backend-quality   Ruff + format check + MyPy' \
-> 	'    make frontend-lint     Run ESLint' \
-> 	'    make frontend-typecheck Run TypeScript check' \
-> 	'    make frontend-quality  ESLint + TypeScript check' \
-> 	'    make quality           Backend + frontend quality checks' \
-> 	'    make frontend-build    Production frontend build' \
-> 	'    make build             Production frontend build' \
-> 	'    make verify            Quality checks + frontend build' \
-> 	'    make ci                Alias for verify' \
-> 	'' \
-> 	'  Cleanup' \
-> 	'    make clean             Safe project-wide cache/build cleanup' \
-> 	'' \
-> 	'  Tests are intentionally excluded for now.'
+	echo "Available commands:"
+	echo
+	echo "Infrastructure:"
+	echo "  make infra-up            Start Qdrant and Redis"
+	echo "  make infra-down          Stop Qdrant and Redis"
+	echo
+	echo "Database:"
+	echo "  make db-migrate          Apply Alembic migrations"
+	echo
+	echo "Backend:"
+	echo "  make back-up             Start Qdrant + Redis + migrations + API + ARQ worker"
+	echo "  make back-down           Stop API + ARQ worker"
+	echo "  make worker-up           Start ARQ ingestion worker only"
+	echo "  make worker-down         Stop ARQ ingestion worker"
+	echo
+	echo "Frontend:"
+	echo "  make front-up            Start frontend"
+	echo "  make front-down          Stop frontend"
+	echo
+	echo "Combined:"
+	echo "  make down                Stop frontend, backend and infrastructure"
+	echo
+	echo "Dependencies:"
+	echo "  make sync                Sync backend and frontend dependencies"
+	echo "  make backend-sync        Sync backend dependencies"
+	echo "  make backend-lock        Update backend lockfile"
+	echo "  make frontend-sync       Sync frontend dependencies"
+	echo
+	echo "Quality:"
+	echo "  make backend-fix         Run backend Ruff fix + format"
+	echo "  make backend-quality     Run backend Ruff + format + mypy"
+	echo "  make frontend-lint       Run frontend lint"
+	echo "  make frontend-typecheck  Run frontend TypeScript checks"
+	echo "  make frontend-quality    Run frontend lint + typecheck"
+	echo "  make quality             Run backend + frontend quality checks"
+	echo
+	echo "Build:"
+	echo "  make frontend-build      Build frontend"
+	echo "  make build               Build production artifacts"
+	echo
+	echo "Verification:"
+	echo "  make verify              Run available verification checks"
+	echo "  make ci                  Run CI-equivalent checks"
+	echo
+	echo "Cleanup:"
+	echo "  make clean               Remove generated local artifacts"
+	echo
+	echo "Tests are intentionally excluded for now."
 
-# ------------------------------------------------------------------------------
-# Infrastructure
-# ------------------------------------------------------------------------------
 
 check-docker:
-> if ! command -v "$(DOCKER)" >/dev/null 2>&1; then
-> 	echo "Error: Docker CLI was not found."
-> 	echo "Make sure Docker/Docker Desktop is installed and available in PATH."
-> 	exit 1
-> fi
+	command -v $(DOCKER) >/dev/null 2>&1 || {
+		echo "Error: Docker is not installed or not available in PATH."
+		exit 1
+	}
+
+	$(DOCKER) info >/dev/null 2>&1 || {
+		echo "Error: Docker daemon is not running."
+		exit 1
+	}
+
 
 infra-up: check-docker
-> echo "==> Starting Qdrant and Redis..."
-> $(DOCKER) compose up -d qdrant redis
-> echo "==> Infrastructure is running."
+	echo "==> Starting Qdrant and Redis..."
+	$(DOCKER) compose up -d qdrant redis
+	echo "==> Infrastructure is running."
+
 
 infra-down: check-docker
-> echo "==> Stopping Qdrant and Redis..."
-> $(DOCKER) compose stop qdrant redis
-> echo "==> Infrastructure stopped."
+	echo "==> Stopping Qdrant and Redis..."
+	$(DOCKER) compose stop qdrant redis
+	echo "==> Infrastructure stopped."
 
-# ------------------------------------------------------------------------------
-# Backend Development
-# ------------------------------------------------------------------------------
 
-back-up: back-down infra-up
-> echo "==> Starting backend on port $(BACKEND_PORT)..."
-> cd $(BACKEND_DIR)
-> uv run uvicorn app.main:app --host 0.0.0.0 --port $(BACKEND_PORT)
+db-migrate:
+	echo "==> Applying database migrations..."
+	cd "$(BACKEND_DIR)"
+	uv run alembic upgrade head
+	echo "==> Database is up to date."
+
 
 back-down:
-> echo "==> Stopping backend on port $(BACKEND_PORT)..."
-> if command -v fuser >/dev/null 2>&1; then
-> 	fuser -k $(BACKEND_PORT)/tcp >/dev/null 2>&1 || true
-> else
-> 	echo "Warning: 'fuser' is not installed; backend process was not stopped automatically."
-> fi
+	echo "==> Stopping backend API and ARQ worker..."
 
-# ------------------------------------------------------------------------------
-# Frontend Development
-# ------------------------------------------------------------------------------
+	if [ -f "$(BACKEND_PID_FILE)" ]; then
+		PID=$$(cat "$(BACKEND_PID_FILE)")
+		if kill -0 "$$PID" 2>/dev/null; then
+			kill "$$PID" 2>/dev/null || true
+		fi
+	fi
 
-front-up: front-down
-> echo "==> Starting frontend..."
-> cd $(FRONTEND_DIR)
-> pnpm dev
+	if [ -f "$(WORKER_PID_FILE)" ]; then
+		PID=$$(cat "$(WORKER_PID_FILE)")
+		if kill -0 "$$PID" 2>/dev/null; then
+			kill "$$PID" 2>/dev/null || true
+		fi
+	fi
+
+	rm -f "$(BACKEND_PID_FILE)" "$(WORKER_PID_FILE)"
+
+	if command -v fuser >/dev/null 2>&1; then
+		fuser -k $(BACKEND_PORT)/tcp >/dev/null 2>&1 || true
+	fi
+
+	echo "==> Backend stopped."
+
+
+back-up: back-down infra-up db-migrate
+	mkdir -p "$(RUN_DIR)"
+
+	echo "==> Starting backend API and ARQ worker..."
+	echo
+
+	cleanup() {
+		echo
+		echo "==> Stopping backend processes..."
+
+		if [ -n "$${BACKEND_PID:-}" ] && kill -0 "$$BACKEND_PID" 2>/dev/null; then
+			kill "$$BACKEND_PID" 2>/dev/null || true
+		fi
+
+		if [ -n "$${WORKER_PID:-}" ] && kill -0 "$$WORKER_PID" 2>/dev/null; then
+			kill "$$WORKER_PID" 2>/dev/null || true
+		fi
+
+		wait "$${BACKEND_PID:-}" 2>/dev/null || true
+		wait "$${WORKER_PID:-}" 2>/dev/null || true
+
+		rm -f "$(BACKEND_PID_FILE)" "$(WORKER_PID_FILE)"
+
+		echo "==> Backend processes stopped."
+	}
+
+	trap cleanup INT TERM EXIT
+
+	cd "$(BACKEND_DIR)"
+
+	echo "==> Starting FastAPI..."
+	uv run uvicorn app.main:app \
+		--host 0.0.0.0 \
+		--port $(BACKEND_PORT) &
+
+	BACKEND_PID=$$!
+	echo "$$BACKEND_PID" > "../$(BACKEND_PID_FILE)"
+
+	echo "==> Starting ARQ worker..."
+	uv run arq app.workers.ingestion.WorkerSettings &
+
+	WORKER_PID=$$!
+	echo "$$WORKER_PID" > "../$(WORKER_PID_FILE)"
+
+	echo
+	echo "==> API PID: $$BACKEND_PID"
+	echo "==> Worker PID: $$WORKER_PID"
+	echo
+	echo "==> Backend API: http://localhost:$(BACKEND_PORT)"
+	echo "==> ARQ worker is running"
+	echo "==> Press Ctrl+C to stop API and worker."
+	echo
+
+	wait -n "$$BACKEND_PID" "$$WORKER_PID"
+
+
+worker-up: infra-up db-migrate
+	mkdir -p "$(RUN_DIR)"
+	echo "==> Starting ARQ ingestion worker..."
+	cd "$(BACKEND_DIR)"
+	uv run arq app.workers.ingestion.WorkerSettings
+
+
+worker-down:
+	echo "==> Stopping ARQ ingestion worker..."
+
+	if [ -f "$(WORKER_PID_FILE)" ]; then
+		PID=$$(cat "$(WORKER_PID_FILE)")
+
+		if kill -0 "$$PID" 2>/dev/null; then
+			kill "$$PID" 2>/dev/null || true
+		fi
+
+		rm -f "$(WORKER_PID_FILE)"
+	fi
+
+	echo "==> ARQ worker stopped."
+
+
+front-up:
+	echo "==> Starting frontend on port $(FRONTEND_PORT)..."
+	cd "$(FRONTEND_DIR)"
+	pnpm dev --port $(FRONTEND_PORT)
+
 
 front-down:
-> echo "==> Stopping frontend on port $(FRONTEND_PORT)..."
-> if command -v fuser >/dev/null 2>&1; then
-> 	fuser -k $(FRONTEND_PORT)/tcp >/dev/null 2>&1 || true
-> else
-> 	echo "Warning: 'fuser' is not installed; frontend process was not stopped automatically."
-> fi
+	echo "==> Stopping frontend..."
 
-# ------------------------------------------------------------------------------
-# Stop Everything
-# ------------------------------------------------------------------------------
+	if command -v fuser >/dev/null 2>&1; then
+		fuser -k $(FRONTEND_PORT)/tcp >/dev/null 2>&1 || true
+	fi
 
-down: back-down front-down infra-down
-> echo "==> Application and infrastructure stopped."
+	echo "==> Frontend stopped."
 
-# ------------------------------------------------------------------------------
-# Dependencies
-# ------------------------------------------------------------------------------
 
-backend-sync:
-> echo "==> Syncing backend dependencies..."
-> cd $(BACKEND_DIR)
-> uv sync --locked
+down: front-down back-down infra-down
+	echo "==> All local services stopped."
 
-backend-lock:
-> echo "==> Resolving/updating uv.lock..."
-> cd $(BACKEND_DIR)
-> uv lock
-
-frontend-sync:
-> echo "==> Installing frontend dependencies..."
-> cd $(FRONTEND_DIR)
-> pnpm install --frozen-lockfile
 
 sync: backend-sync frontend-sync
-> echo "==> All project dependencies are synchronized."
 
-# ------------------------------------------------------------------------------
-# Backend Quality
-# ------------------------------------------------------------------------------
+
+backend-sync:
+	echo "==> Syncing backend dependencies..."
+	cd "$(BACKEND_DIR)"
+	uv sync --locked
+
+
+backend-lock:
+	echo "==> Updating backend lockfile..."
+	cd "$(BACKEND_DIR)"
+	uv lock
+
+
+frontend-sync:
+	echo "==> Syncing frontend dependencies..."
+	cd "$(FRONTEND_DIR)"
+	pnpm install --frozen-lockfile
+
 
 backend-fix:
-> echo "==> Fixing backend with Ruff..."
-> cd $(BACKEND_DIR)
-> uv run ruff check . --fix
-> uv run ruff format .
-> echo "==> Backend auto-fix completed."
+	echo "==> Fixing backend lint and formatting..."
+	cd "$(BACKEND_DIR)"
+	uv run ruff check app --fix
+	uv run ruff format app
+
 
 backend-quality:
-> echo "==> Backend: Ruff"
-> cd $(BACKEND_DIR)
-> uv run ruff check .
+	echo "==> Checking backend quality..."
+	cd "$(BACKEND_DIR)"
+	uv run ruff check app
+	uv run ruff format --check app
+	uv run mypy app
 
-> echo "==> Backend: Ruff format check"
-> uv run ruff format --check .
-
-> echo "==> Backend: MyPy"
-> uv run mypy app/
-
-# ------------------------------------------------------------------------------
-# Frontend Quality
-# ------------------------------------------------------------------------------
 
 frontend-lint:
-> echo "==> Frontend: ESLint"
-> cd $(FRONTEND_DIR)
-> pnpm lint
+	echo "==> Running frontend lint..."
+	cd "$(FRONTEND_DIR)"
+	pnpm lint
+
 
 frontend-typecheck:
-> echo "==> Frontend: TypeScript"
-> cd $(FRONTEND_DIR)
-> pnpm exec tsc --noEmit
+	echo "==> Running frontend typecheck..."
+	cd "$(FRONTEND_DIR)"
+	pnpm exec tsc --noEmit
+
 
 frontend-quality: frontend-lint frontend-typecheck
-> echo "==> Frontend quality checks passed."
 
-# ------------------------------------------------------------------------------
-# Combined Quality
-# ------------------------------------------------------------------------------
-
-quality: backend-quality frontend-quality
-> echo "==> All quality checks passed."
-
-# ------------------------------------------------------------------------------
-# Build / Verification
-# ------------------------------------------------------------------------------
 
 frontend-build:
-> echo "==> Frontend: production build"
-> cd $(FRONTEND_DIR)
-> pnpm build
+	echo "==> Building frontend..."
+	cd "$(FRONTEND_DIR)"
+	pnpm build
+
+
+quality: backend-quality frontend-quality
+
 
 build: frontend-build
+	echo "==> Production build completed."
 
-verify: quality build
-> echo "==> Verification passed."
 
-ci: verify
+verify: quality
+	echo "==> Verification checks completed."
 
-# ------------------------------------------------------------------------------
-# Safe Cleanup
-#
-# Removes generated/cache/build artifacts across the entire repository.
-#
-# Intentionally preserves:
-#   - .git/
-#   - node_modules/
-#   - .venv/
-#   - backend/data/
-#   - SQLite databases
-#   - uploaded documents
-#   - source files
-# ------------------------------------------------------------------------------
+
+ci: quality frontend-build
+	echo "==> CI-equivalent checks completed."
+
 
 clean:
-> echo "==> Cleaning project-wide generated files and caches..."
-
-> find . \
-> 	-path './.git' -prune -o \
-> 	-path '*/node_modules' -prune -o \
-> 	-path '*/.venv' -prune -o \
-> 	-type d \
-> 	\( \
-> 		-name "__pycache__" \
-> 		-o -name ".pytest_cache" \
-> 		-o -name ".ruff_cache" \
-> 		-o -name ".mypy_cache" \
-> 		-o -name ".next" \
-> 		-o -name "out" \
-> 		-o -name "coverage" \
-> 	\) \
-> 	-print -exec rm -rf {} +
-
-> find . \
-> 	-path './.git' -prune -o \
-> 	-path '*/node_modules' -prune -o \
-> 	-path '*/.venv' -prune -o \
-> 	-type f \
-> 	\( \
-> 		-name "*.pyc" \
-> 		-o -name "*.pyo" \
-> 		-o -name "*.coverage" \
-> 		-o -name "*.tsbuildinfo" \
-> 	\) \
-> 	-print -exec rm -f {} +
-
-> echo "==> Project cleanup completed."
+	echo "==> Cleaning generated local artifacts..."
+	rm -rf "$(RUN_DIR)"
+	rm -rf "$(FRONTEND_DIR)/.next"
+	echo "==> Clean complete."
