@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
@@ -21,148 +23,256 @@ logger = logging.getLogger(__name__)
 
 
 async def ingest_document(ctx: dict[str, Any], document_id: str) -> None:
-    """ARQ job to ingest a document."""
+    """Execute the ingestion pipeline for one document."""
     settings = get_settings()
     session_maker = get_session_maker()
+
     storage = ctx["storage"]
     vector_store = ctx["vector_store"]
 
-    doc_uuid = UUID(document_id)
+    try:
+        doc_uuid = UUID(document_id)
+    except ValueError:
+        logger.error(
+            "Invalid document ID received by ingestion worker: %s",
+            document_id,
+        )
+        return
 
     async with session_maker() as db:
-        service = IngestionService(db, storage, vector_store, settings)
+        service = IngestionService(
+            db,
+            storage,
+            vector_store,
+            settings,
+        )
 
         try:
+            logger.info(
+                "Starting ingestion for document %s",
+                document_id,
+                extra={"event": "ingestion.started"},
+            )
+
             await service.ingest(doc_uuid)
-        except TransientIngestionError as e:
-            # Check if this is the last try
+
+            logger.info(
+                "Ingestion job completed for document %s",
+                document_id,
+                extra={"event": "ingestion.completed"},
+            )
+
+        except TransientIngestionError as exc:
             job_try = ctx.get("job_try", 1)
             max_tries = settings.INGESTION_MAX_TRIES
 
             if job_try >= max_tries:
                 logger.error(
-                    "Document %s failed after %d tries: %s",
-                    document_id,
-                    job_try,
-                    e.reason,
-                )
-                # Mark as failed permanently
-                doc = await db.get(Document, doc_uuid)
-                if doc:
-                    await service.fail_document(doc, e.reason)
-            else:
-                logger.warning(
-                    "Transient error on doc %s (try %d/%d), raising arq.Retry: %s",
+                    "Document %s exhausted retries (%d/%d): %s",
                     document_id,
                     job_try,
                     max_tries,
-                    e.reason,
+                    exc.reason,
+                    extra={
+                        "event": "ingestion.retry_exhausted",
+                        "reason": exc.reason,
+                    },
                 )
 
-                # Raise Retry so it uses default backoff
-                raise Retry() from e
+                doc = await db.get(Document, doc_uuid)
+                if doc is not None:
+                    await service.fail_document(doc, exc.reason)
 
-        except PermanentIngestionError as e:
-            logger.error("Permanent error on doc %s: %s", document_id, e.reason)
+                return
+
+            logger.warning(
+                "Transient ingestion error for document %s (try %d/%d): %s. Retrying.",
+                document_id,
+                job_try,
+                max_tries,
+                exc.reason,
+                extra={
+                    "event": "ingestion.retry",
+                    "reason": exc.reason,
+                    "job_try": job_try,
+                },
+            )
+
+            raise Retry() from exc
+
+        except PermanentIngestionError as exc:
+            logger.error(
+                "Permanent ingestion error for document %s: %s",
+                document_id,
+                exc.reason,
+                extra={
+                    "event": "ingestion.permanent_error",
+                    "reason": exc.reason,
+                },
+            )
+
             doc = await db.get(Document, doc_uuid)
-            if doc:
-                await service.fail_document(doc, e.reason)
+            if doc is not None:
+                await service.fail_document(doc, exc.reason)
+
         except Exception:
-            logger.exception("Unexpected error on doc %s", document_id)
+            logger.exception(
+                "Unexpected ingestion error for document %s",
+                document_id,
+                extra={"event": "ingestion.unexpected_error"},
+            )
+
             doc = await db.get(Document, doc_uuid)
-            if doc:
+            if doc is not None:
                 await service.fail_document(doc, "internal_error")
 
 
 async def on_startup(ctx: dict[str, Any]) -> None:
-    """Worker startup: warm up model and perform recovery sweep."""
+    """Initialize worker resources and recover unfinished documents."""
     settings = get_settings()
 
     ctx["storage"] = DocumentStorage()
     ctx["vector_store"] = build_vector_store(settings)
 
-    logger.info("Warming up embedding model...")
-    # Run embedding warm-up in a background thread to avoid blocking the event loop
-    await asyncio.to_thread(get_embedding_model, settings.EMBEDDING_MODEL)
-    logger.info("Embedding model warmed up.")
+    logger.info("Warming up embedding model")
+    await asyncio.to_thread(
+        get_embedding_model,
+        settings.EMBEDDING_MODEL,
+    )
+    logger.info(
+        "Embedding model warmed up",
+        extra={"event": "embedding.model_ready"},
+    )
 
-    logger.info("Starting recovery sweep for stuck documents...")
+    logger.info("Starting recovery sweep")
+
     session_maker = get_session_maker()
 
     async with session_maker() as db:
-        # Find UPLOADED or PROCESSING documents
-        stmt = select(Document).where(
-            Document.status.in_([DocumentStatus.UPLOADED, DocumentStatus.PROCESSING])
+        statement = select(Document).where(
+            Document.status.in_(
+                [
+                    DocumentStatus.UPLOADED,
+                    DocumentStatus.PROCESSING,
+                ]
+            )
         )
-        result = await db.execute(stmt)
-        docs = result.scalars().all()
 
-        if docs:
-            logger.info(
-                "Found %d stuck documents. Resetting and enqueuing...",
-                len(docs),
+        result = await db.execute(statement)
+        documents = result.scalars().all()
+
+        if not documents:
+            logger.info("Recovery sweep found no unfinished documents")
+            return
+
+        logger.warning(
+            "Recovery sweep found %d unfinished document(s)",
+            len(documents),
+            extra={"event": "ingestion.recovery_started"},
+        )
+
+        redis = ctx["redis"]
+
+        for document in documents:
+            document.status = DocumentStatus.UPLOADED
+
+            await redis.enqueue_job(
+                "ingest_document",
+                str(document.id),
             )
 
-            # Use the existing redis pool provided by ARQ context
-            pool = ctx["redis"]
+        await db.commit()
 
-            for doc in docs:
-                doc.status = DocumentStatus.UPLOADED
-                await pool.enqueue_job("ingest_document", str(doc.id))
-
-            await db.commit()
-            logger.info("Recovery sweep complete.")
-        else:
-            logger.info("No stuck documents found in recovery sweep.")
+        logger.info(
+            "Recovery sweep completed for %d document(s)",
+            len(documents),
+            extra={
+                "event": "ingestion.recovery_completed",
+                "recovered_count": len(documents),
+            },
+        )
 
 
 async def on_shutdown(ctx: dict[str, Any]) -> None:
-    logger.info("Worker shutting down.")
+    """Release worker-owned resources."""
+    logger.info("Worker shutdown started")
+
     vector_store = ctx.get("vector_store")
-    if (
-        vector_store
-        and hasattr(vector_store, "client")
-        and hasattr(vector_store.client, "close")
-    ):
-        await vector_store.client.close()
+    if vector_store is None:
+        logger.info("Worker shutdown complete")
+        return
+
+    client = getattr(vector_store, "client", None)
+    close = getattr(client, "close", None)
+
+    if close is not None:
+        try:
+            result = close()
+            if result is not None:
+                await result
+        except Exception:
+            logger.exception("Failed to close worker vector store client")
+
+    logger.info("Worker shutdown complete")
 
 
 async def stalled_watchdog(ctx: dict[str, Any]) -> None:
-    """Cron job to fail documents stuck in processing."""
+    """Fail documents that remained processing beyond the timeout."""
     settings = get_settings()
     session_maker = get_session_maker()
 
-    # Needs to be older than timeout + 60s
     threshold = datetime.now(UTC) - timedelta(
         seconds=settings.INGESTION_JOB_TIMEOUT_S + 60
     )
 
     async with session_maker() as db:
-        # Dummy service (no storage/vector_store needed for fail_document)
-        service = IngestionService(db, None, None, settings)  # type: ignore
-
-        stmt = select(Document).where(
+        statement = select(Document).where(
             Document.status == DocumentStatus.PROCESSING,
             Document.updated_at < threshold,
         )
-        result = await db.execute(stmt)
-        docs = result.scalars().all()
 
-        for doc in docs:
-            logger.warning("Watchdog failing stalled document: %s", doc.id)
-            await service.fail_document(doc, "stalled")
+        result = await db.execute(statement)
+        documents = result.scalars().all()
+
+        if not documents:
+            return
+
+        service = IngestionService(
+            db,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            settings,
+        )
+
+        for document in documents:
+            logger.warning(
+                "Watchdog failing stalled document %s",
+                document.id,
+                extra={
+                    "event": "ingestion.stalled",
+                    "document_id": str(document.id),
+                },
+            )
+
+            await service.fail_document(
+                document,
+                "stalled",
+            )
 
 
-# Configure worker
 settings = get_settings()
 
 
 class WorkerSettings:
+    """ARQ worker configuration."""
+
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     functions = [ingest_document]  # noqa: RUF012
     cron_jobs = [arq.cron(stalled_watchdog, minute=set(range(60)))]  # noqa: RUF012
+
     on_startup = on_startup
     on_shutdown = on_shutdown
+
     max_jobs = settings.INGESTION_WORKER_MAX_JOBS
     job_timeout = settings.INGESTION_JOB_TIMEOUT_S
     max_tries = settings.INGESTION_MAX_TRIES

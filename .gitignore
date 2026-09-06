@@ -34,6 +34,7 @@ celerybeat.pid
 *.rdb
 *.aof
 backend/data
+.run
 
 # ------------------------------------------------------------------------------
 # Frontend (Node / Next.js)

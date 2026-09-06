@@ -351,25 +351,38 @@ const MessageList = memo(function MessageList({
   const isThinking = status === 'streaming' && messages[messages.length - 1]?.role === 'user';
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const autoScrollEnabled = useRef(true);
+  const prevMessageCount = useRef(messages.length);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !bottomRef.current) return;
+    if (!bottomRef.current) return;
 
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    const isNewMessage = messages.length > prevMessageCount.current;
+    prevMessageCount.current = messages.length;
 
-    if (isNearBottom) {
+    if (isNewMessage) {
+      autoScrollEnabled.current = true;
+    }
+
+    if (autoScrollEnabled.current) {
       bottomRef.current.scrollIntoView({
-        behavior: status === 'streaming' ? 'auto' : 'smooth',
+        behavior: status === 'streaming' && !isNewMessage ? 'auto' : 'smooth',
       });
     }
   }, [messages, status, ragPhase]);
 
+  const handleScroll = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    autoScrollEnabled.current = scrollHeight - scrollTop - clientHeight < 50;
+  };
+
   return (
     <div
       ref={containerRef}
-      className="flex-1 min-h-0 overflow-y-auto px-4 py-6 scroll-smooth custom-scrollbar"
+      onScroll={handleScroll}
+      className="flex-1 min-h-0 overflow-y-auto px-4 py-6 custom-scrollbar"
     >
       <div className="mx-auto max-w-3xl flex flex-col gap-6">
         {messages.map((message) => (
