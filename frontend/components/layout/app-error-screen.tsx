@@ -14,7 +14,7 @@ export function AppErrorScreen({ reset }: { reset: () => void }) {
         </div>
         <h1 className="mt-5 text-xl font-semibold">We couldn’t load this page</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Check that the RAG server is running, then try again.
+          Something went wrong while loading this page. Please try again.
         </p>
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
           <button

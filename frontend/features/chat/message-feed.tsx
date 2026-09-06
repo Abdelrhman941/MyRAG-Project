@@ -3,24 +3,31 @@
 import { useDocuments } from '@/features/documents/use-documents';
 import { useReadiness } from '@/hooks/use-readiness';
 import { useConfig } from '@/lib/config';
-import type { Message } from '@/lib/types';
+import type { Document, Message } from '@/lib/types';
 import { useMemo, useRef } from 'react';
 import { AgentChat, type AgentMessage } from './agent-chat';
 import { useChatStream } from './use-chat-stream';
 
 export function MessageFeed({
   initialMessages,
+  initialDocuments,
   sessionId,
 }: {
   initialMessages: Message[];
+  initialDocuments?: Document[];
   sessionId: string;
 }) {
   const { messages, phase, isStreaming, send, stop } = useChatStream(initialMessages, sessionId);
 
   const config = useConfig();
-  const { documents, uploadFiles, isUploading, uploadingCount } = useDocuments(sessionId);
+  // ✅ Pass initialDocuments to skip redundant client-side fetching
+  const { documents, uploadFiles, isUploading, uploadingCount } = useDocuments(
+    sessionId,
+    initialDocuments
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { status: readinessStatus, detail: readinessDetail, retry } = useReadiness();
+
   const modelReady = readinessStatus === 'ready';
   const modelError = readinessStatus === 'error' ? readinessDetail || 'Failed to load model' : null;
   const isSearchEngineStarting = readinessStatus === 'qdrant_not_ready';
@@ -62,7 +69,7 @@ export function MessageFeed({
         className="hidden"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept={config?.accepted_extensions.join(',')}
+        accept={config.accepted_extensions.join(',')}
       />
 
       {(readinessStatus === 'connecting' || readinessStatus === 'warming') && (
@@ -78,9 +85,8 @@ export function MessageFeed({
         <div className="absolute top-0 left-0 right-0 bg-red-500/10 text-red-700 dark:text-red-400 p-3 text-center text-sm flex items-center justify-center gap-3 z-10 border-b border-red-500/20 backdrop-blur-sm">
           <span>Failed to load AI model: {modelError}</span>
           <button
-            onClick={() => {
-              retry();
-            }}
+            type="button"
+            onClick={retry}
             className="underline font-semibold hover:text-red-800 dark:hover:text-red-300"
           >
             Retry
@@ -103,7 +109,7 @@ export function MessageFeed({
         emptyStatePosition="center"
         disabled={!modelReady}
         placeholder={!modelReady ? 'Waiting for model...' : 'Message...'}
-        suggestedDocuments={documents?.map(d => d.original_file_name)}
+        suggestedDocuments={documents.map((d) => d.original_file_name)}
         attachments={{
           onAttach: () => fileInputRef.current?.click(),
           isUploading,

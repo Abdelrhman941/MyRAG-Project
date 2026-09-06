@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .apis import (
     api_v1_router,
-    base_router,
+    health_router,
     register_exception_handlers,
 )
 from .core import (
@@ -116,7 +116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)
-    app.include_router(base_router)
+    app.include_router(health_router)
     app.include_router(api_v1_router)
 
     return app

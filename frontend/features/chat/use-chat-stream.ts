@@ -1,15 +1,19 @@
 'use client';
 
-import { streamChatAnswer, type ChatStreamEvent } from '@/lib/api/stream';
 import { revalidateSessionsAction } from '@/lib/api';
+import { streamChatAnswer, type ChatStreamEvent } from '@/lib/api/stream';
 import type { Message, SourceCitation } from '@/lib/types';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+// --- Types ---
 
 export type StreamPhase = 'idle' | 'retrieving' | 'generating';
 
 export type ChatStreamMessage = Message & {
   clientId: string;
 };
+
+// --- Helpers ---
 
 function makeClientId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -26,6 +30,8 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+// --- Hook ---
+
 export function useChatStream(initialMessages: Message[], sessionId: string) {
   const [messages, setMessages] = useState<ChatStreamMessage[]>(() =>
     withClientIds(initialMessages)
@@ -34,10 +40,12 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
   const [isStreaming, setIsStreaming] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
 
+  // Stop the current stream
   const stop = useCallback(() => {
     controllerRef.current?.abort();
   }, []);
 
+  // Send a new message and handle the streaming lifecycle
   const send = useCallback(
     async (question: string) => {
       if (!question.trim() || controllerRef.current) return;
@@ -45,9 +53,13 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
       const controller = new AbortController();
       const userClientId = makeClientId('user');
       const assistantClientId = makeClientId('assistant');
+
       let pendingSources: SourceCitation[] = [];
       let streamStarted = false;
       let assistantCreated = false;
+
+      // Track if this is the very first message in the session for sidebar revalidation
+      const isFirstExchange = messages.length === 0;
 
       const ensureAssistant = () => {
         if (assistantCreated) return;
@@ -90,14 +102,11 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
         if (event.type === 'done') {
           ensureAssistant();
           setMessages((current) => {
-            // If this is the first exchange (2 messages = user + assistant),
-            // revalidate the session list so the sidebar shows the auto-generated title.
-            if (current.length === 2) {
-              try {
-                void revalidateSessionsAction();
-              } catch {
-                // Fire-and-forget — sidebar will update on next navigation
-              }
+            // Revalidate sidebar only for the first exchange to fetch the auto-generated title
+            if (isFirstExchange) {
+              void revalidateSessionsAction().catch(() => {
+                // Fire-and-forget: sidebar will update on next navigation
+              });
             }
             return current.map((message) =>
               message.clientId === assistantClientId ? { ...message, id: event.messageId } : message
@@ -106,6 +115,7 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
           return;
         }
 
+        // Handle stream errors
         ensureAssistant();
         setMessages((current) =>
           current.map((message) =>
@@ -114,6 +124,7 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
         );
       };
 
+      // Optimistic UI: Add user message immediately
       setMessages((current) => [
         ...current,
         {
@@ -124,6 +135,7 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
           created_at: new Date().toISOString(),
         },
       ]);
+
       controllerRef.current = controller;
       setPhase('retrieving');
       setIsStreaming(true);
@@ -135,8 +147,10 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
         });
       } catch (error) {
         if (!isAbortError(error) && !streamStarted) {
+          // Remove user message if stream failed before starting
           setMessages((current) => current.filter((message) => message.clientId !== userClientId));
         } else if (!isAbortError(error)) {
+          // Show error on the assistant message if stream was interrupted
           ensureAssistant();
           setMessages((current) =>
             current.map((message) =>
@@ -154,8 +168,18 @@ export function useChatStream(initialMessages: Message[], sessionId: string) {
         }
       }
     },
-    [sessionId]
+    [sessionId, messages.length] // Added messages.length to accurately track isFirstExchange
   );
+
+  // Cleanup: Abort ongoing stream if sessionId changes (e.g., user switches chats)
+  useEffect(() => {
+    return () => {
+      if (controllerRef.current) {
+        controllerRef.current.abort();
+        controllerRef.current = null;
+      }
+    };
+  }, [sessionId]);
 
   return { messages, phase, isStreaming, send, stop };
 }

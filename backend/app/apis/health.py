@@ -1,13 +1,11 @@
-# app/apis/system.py
-from typing import Any
 from fastapi import APIRouter, Request, Response
 
 from ..dependencies import SettingsDep
 
-system_router = APIRouter(tags=["System"])
+health_router = APIRouter(tags=["Health"])
 
 
-@system_router.get("/")
+@health_router.get("/")
 def root(settings: SettingsDep) -> dict[str, str]:
     """Return basic application metadata."""
     return {
@@ -17,13 +15,13 @@ def root(settings: SettingsDep) -> dict[str, str]:
     }
 
 
-@system_router.get("/healthz")
+@health_router.get("/healthz")
 def healthz() -> dict[str, str]:
     """Liveness probe."""
     return {"status": "ok"}
 
 
-@system_router.get("/readyz")
+@health_router.get("/readyz")
 async def readyz(request: Request, response: Response) -> dict[str, str]:
     """Readiness probe checking model load status and Qdrant."""
     error = getattr(request.app.state, "model_error", None)
@@ -47,17 +45,3 @@ async def readyz(request: Request, response: Response) -> dict[str, str]:
         return {"status": "qdrant_error", "detail": str(e)}
 
     return {"status": "ready"}
-
-
-@system_router.get("/api/v1/system/config")
-def config(settings: SettingsDep) -> dict[str, Any]:
-    from ..core.enums.document import DocumentType
-
-    return {
-        "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
-        "max_files_per_request": settings.MAX_FILES_PER_REQUEST,
-        "accepted_extensions": [t.extension for t in DocumentType],
-        "app_name": settings.APP_NAME,
-        "app_version": settings.APP_VERSION,
-        "max_question_length": settings.MAX_QUESTION_LENGTH,
-    }

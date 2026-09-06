@@ -22,10 +22,12 @@ import {
 } from '@/components/ui/table';
 import { useConfig } from '@/lib/config';
 import type { Document } from '@/lib/types';
-import { File, FileUp, Loader2, Trash2, UploadCloud, RotateCcw } from 'lucide-react';
+import { File, FileUp, Loader2, RotateCcw, Trash2, UploadCloud } from 'lucide-react';
 import { useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useDocuments } from './use-documents';
+
+// --- Helpers ---
 
 function formatSize(bytes?: number | null) {
   if (bytes == null) return '—';
@@ -33,11 +35,22 @@ function formatSize(bytes?: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// ✅ Improvement: Consistent date formatting
+function formatDate(dateString: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(dateString));
+}
+
 const BUSY_STATUSES: Document['status'][] = ['processing', 'uploaded', 'deleting'];
 
 function isBusy(document: Document) {
   return BUSY_STATUSES.includes(document.status);
 }
+
+// --- Sub-Components ---
 
 function DocumentStatusBadge({ status }: { status: Document['status'] }) {
   const isWorking = BUSY_STATUSES.includes(status);
@@ -62,6 +75,8 @@ function DocumentStatusBadge({ status }: { status: Document['status'] }) {
   );
 }
 
+// --- Main Component ---
+
 export function DocumentManager({
   initialDocuments,
   sessionId,
@@ -69,13 +84,22 @@ export function DocumentManager({
   initialDocuments: Document[];
   sessionId: string;
 }) {
-  const { documents, isUploading, isPending, uploadFiles, handleDelete, handleRetry, deleteDocument } =
-    useDocuments(sessionId, initialDocuments);
+  const {
+    documents,
+    isUploading,
+    isPending,
+    uploadFiles,
+    handleDelete,
+    handleRetry,
+    deleteDocument,
+  } = useDocuments(sessionId, initialDocuments);
   const config = useConfig();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
   const [isDeletingAll, startDeleteAll] = useTransition();
+
+  // ✅ Simple and fast enough for typical document lists
   const hasBusyDocuments = documents.some(isBusy);
 
   const selectFiles = () => fileInputRef.current?.click();
@@ -141,7 +165,12 @@ export function DocumentManager({
           accept={config?.accepted_extensions.join(',')}
           onChange={handleUpload}
         />
-        <Button onClick={selectFiles} disabled={isUploading || !config} className="gap-2">
+        <Button
+          type="button"
+          onClick={selectFiles}
+          disabled={isUploading || !config}
+          className="gap-2"
+        >
           {isUploading ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
@@ -157,6 +186,7 @@ export function DocumentManager({
           <p className="text-sm text-muted-foreground">{documents.length} in this knowledge base</p>
         </div>
         <Button
+          type="button"
           variant="destructive"
           size="sm"
           onClick={() => setIsDeleteAllOpen(true)}
@@ -195,7 +225,9 @@ export function DocumentManager({
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       <File className="size-4 text-muted-foreground" />
-                      <span className="max-w-64 truncate">{document.original_file_name}</span>
+                      <span className="max-w-64 truncate" title={document.original_file_name}>
+                        {document.original_file_name}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -205,11 +237,12 @@ export function DocumentManager({
                     {formatSize(document.file_size_bytes)}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {new Date(document.created_at).toLocaleDateString()}
+                    {formatDate(document.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
                     {document.status === 'failed' && (
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRetry(document.id)}
@@ -221,6 +254,7 @@ export function DocumentManager({
                       </Button>
                     )}
                     <Button
+                      type="button"
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDelete(document.id)}
@@ -247,8 +281,8 @@ export function DocumentManager({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={deleteAll}>
+            <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+            <AlertDialogAction type="button" variant="destructive" onClick={deleteAll}>
               Delete all documents
             </AlertDialogAction>
           </AlertDialogFooter>

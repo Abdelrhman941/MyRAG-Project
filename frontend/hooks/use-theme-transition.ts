@@ -10,7 +10,7 @@ type ViewTransitionDocument = Document & {
 
 const toAppTheme = (theme: string | undefined): AppTheme => (theme === 'light' ? 'light' : 'dark');
 
-/** Changes the next-themes value with an LTR View Transition when the browser supports it. */
+/** Changes the theme with a smooth View Transition when supported by the browser. */
 export function useThemeTransition() {
   const { resolvedTheme, setTheme } = useTheme();
   const [isTransitioning, setIsTransitioning] = useState(false);

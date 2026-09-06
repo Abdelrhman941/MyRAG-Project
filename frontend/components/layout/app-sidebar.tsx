@@ -47,12 +47,15 @@ import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 function relativeDate(value: string): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - parseUtcDate(value).getTime()) / 1000));
+  const date = parseUtcDate(value);
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+
   if (seconds < 60) return 'now';
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-  return parseUtcDate(value).toLocaleDateString();
+
+  return date.toLocaleDateString();
 }
 
 function FileTypeIcon({ document }: { document: Document }) {
@@ -63,14 +66,13 @@ function FileTypeIcon({ document }: { document: Document }) {
 }
 
 function StatusDot({ status }: { status: Document['status'] }) {
-  const color =
-    status === 'processing' || status === 'uploaded'
-      ? 'bg-amber-500 animate-pulse'
-      : status === 'deleting'
-        ? 'bg-neutral-400 animate-pulse'
-        : status === 'failed'
-          ? 'bg-red-500'
-          : 'bg-emerald-500';
+  const color = {
+    processing: 'bg-amber-500 animate-pulse',
+    uploaded: 'bg-amber-500 animate-pulse',
+    deleting: 'bg-neutral-400 animate-pulse',
+    failed: 'bg-red-500',
+    ready: 'bg-emerald-500',
+  }[status];
 
   return <span className={`size-1.5 shrink-0 rounded-full ${color}`} />;
 }
@@ -89,23 +91,25 @@ function WorkspaceNavigation({
       <div className="px-3 pt-4 pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/60">
         Workspace
       </div>
+
       <SidebarGroupContent className="px-2">
         <SidebarMenu className="gap-1">
           <SidebarMenuItem>
             <SidebarMenuButton
-              render={<Link href={`/chat/${activeSessionId}`} prefetch={true} />}
+              render={<Link href={`/chat/${activeSessionId}`} />}
               isActive={pathname === `/chat/${activeSessionId}`}
-              className="rounded-lg h-10 transition-colors hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent/80"
+              className="h-10 rounded-lg transition-colors hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent/80"
             >
               <MessageSquare className="size-4" />
               <span>Chat</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
+
           <SidebarMenuItem>
             <SidebarMenuButton
-              render={<Link href={`/chat/${activeSessionId}/documents`} prefetch={true} />}
+              render={<Link href={`/chat/${activeSessionId}/documents`} />}
               isActive={pathname === `/chat/${activeSessionId}/documents`}
-              className="rounded-lg h-10 transition-colors hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent/80"
+              className="h-10 rounded-lg transition-colors hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent/80"
             >
               <Files className="size-4" />
               <span>Knowledge Base</span>
@@ -113,6 +117,7 @@ function WorkspaceNavigation({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+
         <div className="mt-2 max-h-52 overflow-y-auto pb-1 custom-scrollbar">
           {documents.length ? (
             documents.map((document) => (
@@ -128,7 +133,7 @@ function WorkspaceNavigation({
               </div>
             ))
           ) : (
-            <div className="mx-1 my-1 px-3 py-3 rounded-lg border border-dashed border-sidebar-border/70 flex items-center justify-center">
+            <div className="mx-1 my-1 flex items-center justify-center rounded-lg border border-dashed border-sidebar-border/70 px-3 py-3">
               <p className="text-[11px] text-muted-foreground/70">No documents yet</p>
             </div>
           )}
@@ -152,35 +157,37 @@ function ChatList({
   onDelete: (sessionId: string) => void;
 }) {
   return (
-    <SidebarGroup className="p-0 flex-1 overflow-hidden flex flex-col">
-      <div className="px-3 pt-3 pb-2 shrink-0 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/60">
+    <SidebarGroup className="flex flex-1 flex-col overflow-hidden p-0">
+      <div className="shrink-0 px-3 pt-3 pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/60">
         Chats
       </div>
+
       <SidebarGroupContent className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2">
         <SidebarMenu className="gap-1.5">
           {sessions.length ? (
             sessions.map((session) => (
               <SidebarMenuItem key={session.id} className="group relative">
                 <SidebarMenuButton
-                  render={<Link href={`/chat/${session.id}`} prefetch={true} />}
+                  render={<Link href={`/chat/${session.id}`} />}
                   isActive={activeSessionId === session.id}
-                  className="h-auto min-h-13 py-2.5 pr-10 rounded-xl transition-all border border-transparent hover:bg-sidebar-accent/50 data-[active=true]:bg-sidebar-accent/80 data-[active=true]:border-sidebar-border/50 data-[active=true]:shadow-sm"
+                  className="h-auto min-h-13 rounded-xl border border-transparent py-2.5 pr-10 transition-all hover:bg-sidebar-accent/50 data-[active=true]:border-sidebar-border/50 data-[active=true]:bg-sidebar-accent/80 data-[active=true]:shadow-sm"
                 >
                   <div className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium leading-snug">
                       {session.title || 'New Chat'}
                     </span>
-                    <span className="block text-[11px] text-muted-foreground mt-0.5">
+                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
                       {relativeDate(session.updated_at || session.created_at)}
                     </span>
                   </div>
                 </SidebarMenuButton>
+
                 <button
                   type="button"
                   onClick={() => onDelete(session.id)}
                   disabled={isPending}
                   aria-label="Delete chat"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+                  className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100 disabled:opacity-50"
                 >
                   {deletingId === session.id ? (
                     <Loader2 className="size-3.5 animate-spin" />
@@ -205,15 +212,18 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
   const pathname = usePathname();
   const config = useConfig();
   const { theme, toggleTheme, isTransitioning: isThemeTransitioning } = useThemeTransition();
+
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
+
   const activeSessionId = pathname.match(/\/chat\/([^/]+)/)?.[1] ?? null;
   const { documents } = useDocuments(activeSessionId);
 
   const deleteSession = (sessionId: string, force = false) => {
     setDeletingId(sessionId);
+
     startTransition(async () => {
       const result = await deleteSessionAction(
         sessionId,
@@ -221,16 +231,21 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
         initialSessions,
         force
       );
+
       setDeletingId(null);
 
       if (!result.success) {
         if (result.error?.code === 'document_processing' && !force) {
           toast.error('Cannot delete this chat while documents are processing.', {
-            action: { label: 'Force Delete', onClick: () => deleteSession(sessionId, true) },
+            action: {
+              label: 'Force Delete',
+              onClick: () => deleteSession(sessionId, true),
+            },
           });
         } else {
           toast.error(result.error?.message || 'Failed to delete chat.');
         }
+
         return;
       }
 
@@ -240,8 +255,10 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
 
   const deleteAllChats = () => {
     setIsDeleteAllOpen(false);
+
     startTransition(async () => {
       let results;
+
       try {
         results = await Promise.all(
           initialSessions.map((session) =>
@@ -264,15 +281,15 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
   };
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        startTransition(() => {
-          createSessionAction();
-        });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'k' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        startTransition(() => createSessionAction());
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
+
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
@@ -291,7 +308,8 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
             height={40}
             className="size-10 shrink-0"
           />
-          <div className="relative h-10 w-32 ml-1">
+
+          <div className="relative ml-1 h-10 w-32">
             <Image
               src="/images/logos/nova-text.webp"
               alt="Nova"
@@ -300,13 +318,14 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
             />
           </div>
         </div>
+
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
                 onClick={() => startTransition(() => createSessionAction())}
                 disabled={isPending}
-                className="w-full justify-start gap-2 h-10 rounded-xl mt-1"
+                className="mt-1 h-10 w-full justify-start gap-2 rounded-xl"
               >
                 <Plus className="size-4" />
                 New Chat
@@ -317,8 +336,8 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
         </Tooltip>
       </SidebarHeader>
 
-      <SidebarContent className="px-2 pb-2 overflow-hidden flex flex-col gap-2 mt-2">
-        <div className="shrink-0 flex flex-col">
+      <SidebarContent className="mt-2 flex flex-col gap-2 overflow-hidden px-2 pb-2">
+        <div className="flex shrink-0 flex-col">
           {activeSessionId && (
             <WorkspaceNavigation
               activeSessionId={activeSessionId}
@@ -327,6 +346,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
             />
           )}
         </div>
+
         <ChatList
           sessions={initialSessions}
           activeSessionId={activeSessionId}
@@ -337,7 +357,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
       </SidebarContent>
 
       <SidebarFooter className="p-3 pt-0">
-        <div className="flex items-center gap-1 rounded-xl p-1 bg-sidebar-accent/30 border border-sidebar-border/50">
+        <div className="flex items-center gap-1 rounded-xl border border-sidebar-border/50 bg-sidebar-accent/30 p-1">
           <Tooltip>
             <TooltipTrigger
               render={
@@ -346,7 +366,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
                   onClick={toggleTheme}
                   disabled={isThemeTransitioning}
                   aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-                  className="flex-1 flex justify-center items-center rounded-lg p-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-50 transition-colors"
+                  className="flex flex-1 items-center justify-center rounded-lg p-2.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-50"
                 />
               }
             >
@@ -356,7 +376,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
             <TooltipContent>Toggle theme</TooltipContent>
           </Tooltip>
 
-          <div className="w-px h-5 bg-sidebar-border/50 shrink-0 mx-0.5" />
+          <div className="mx-0.5 h-5 w-px shrink-0 bg-sidebar-border/50" />
 
           <Tooltip>
             <TooltipTrigger
@@ -365,7 +385,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
                   type="button"
                   onClick={() => setIsDeleteAllOpen(true)}
                   disabled={!initialSessions.length || isPending}
-                  className="flex-1 flex justify-center items-center rounded-lg p-2.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 transition-colors"
+                  className="flex flex-1 items-center justify-center rounded-lg p-2.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
                 />
               }
             >
@@ -387,12 +407,17 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
               Its messages and documents will be removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
+
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
-                if (sessionToDelete) deleteSession(sessionToDelete);
+                if (sessionToDelete) {
+                  deleteSession(sessionToDelete);
+                }
+
                 setSessionToDelete(null);
               }}
             >
@@ -410,6 +435,7 @@ export function AppSidebar({ initialSessions }: { initialSessions: Session[] }) 
               This will permanently delete ALL chats and their documents.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={deleteAllChats}>

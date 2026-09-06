@@ -7,7 +7,13 @@ export type AppTheme = 'light' | 'dark';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   return (
-    <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem={false} themes={['light', 'dark']}>
+    <NextThemesProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem={false}
+      enableColorScheme
+      themes={['light', 'dark']}
+    >
       {children}
     </NextThemesProvider>
   );

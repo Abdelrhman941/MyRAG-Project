@@ -2,7 +2,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ChatSessionLoading() {
   return (
-    <div className="flex flex-col h-full bg-muted/20 px-4 py-6">
+    <div className="relative flex h-full flex-col bg-muted/20 px-4 py-6">
       <div className="max-w-3xl mx-auto w-full space-y-6">
         <div className="flex justify-end">
           <Skeleton className="h-16 w-64 rounded-2xl" />

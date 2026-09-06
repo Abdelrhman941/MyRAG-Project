@@ -11,7 +11,7 @@ type ReadinessState = {
 };
 
 function normalizeStatus(status: string): ReadinessStatus {
-  if (status === 'ready' || status === 'warming' || status === 'qdrant_not_ready') {
+  if (status === 'ready' || status === 'warming' || status === 'qdrant_not_ready' || status === 'connecting') {
     return status;
   }
   return 'error';

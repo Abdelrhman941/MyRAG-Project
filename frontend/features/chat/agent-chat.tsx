@@ -1,17 +1,27 @@
 'use client';
 
+import { useConfig } from '@/lib/config';
 import type { SourceCitation } from '@/lib/types';
 import { cn, parseUtcDate } from '@/lib/utils';
-import { ArrowUp, Paperclip, Square, Check, Copy, ChevronDown } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type ComponentPropsWithoutRef, type ElementType } from 'react';
+import { ArrowUp, Check, ChevronDown, Copy, Paperclip, Square } from 'lucide-react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type ElementType,
+  type ReactNode,
+} from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Citations } from './citations';
-import { useConfig } from '@/lib/config';
+
+// --- Types ---
 
 export type ChatStatus = 'ready' | 'streaming' | 'submitted' | 'idle';
-
-/** Describes the current chat-stream phase derived from SSE events. */
 export type RagPhase = 'idle' | 'retrieving' | 'generating';
 
 export type MessagePart =
@@ -20,7 +30,6 @@ export type MessagePart =
 
 export type AgentMessage = {
   id: string;
-  /** Client-generated identity that remains stable when the backend ID arrives. */
   stableId: string;
   role: 'user' | 'assistant';
   parts: MessagePart[];
@@ -47,9 +56,26 @@ export type AgentChatProps = {
   suggestedDocuments?: string[];
 };
 
+// --- Helpers ---
+
+/** Safely copies text to clipboard, preventing crashes in non-secure contexts. */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (err) {
+    console.error('Failed to copy to clipboard:', err);
+    return false;
+  }
+}
+
+// --- Icons ---
+
 const SendIcon = () => <ArrowUp className="w-5 h-5" strokeWidth={2.5} />;
 const StopIcon = () => <Square className="w-3 h-3 fill-current" />;
-const PaperclipIcon = () => <Paperclip className="w-4.5 h-4.5" />;
+const PaperclipIcon = () => <Paperclip className="w-5 h-5" />;
+
+// --- Sub-Components ---
 
 function UserBubble({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -59,7 +85,6 @@ function UserBubble({ text }: { text: string }) {
   useEffect(() => {
     const el = contentRef.current;
     if (el) {
-      // Check if actual content height exceeds 200px threshold
       setIsOverflowing(el.scrollHeight > 200);
     }
   }, [text]);
@@ -71,18 +96,19 @@ function UserBubble({ text }: { text: string }) {
           ref={contentRef}
           className={cn(
             'px-4 pt-2.5 whitespace-pre-wrap wrap-break-word transition-[max-height,padding] duration-500 ease-in-out',
-            expanded ? 'max-h-[3000px] pb-10' : 'max-h-[200px] pb-2.5 overflow-hidden'
+            expanded ? 'max-h-[3000px] pb-10' : 'max-h-50 pb-2.5 overflow-hidden'
           )}
         >
           {text}
         </div>
 
         {isOverflowing && !expanded && (
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-neutral-100 dark:from-[#303030] to-transparent pointer-events-none rounded-b-2xl" />
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-linear-to-t from-neutral-100 dark:from-[#303030] to-transparent pointer-events-none rounded-b-2xl" />
         )}
 
         {isOverflowing && (
           <button
+            type="button"
             onClick={() => setExpanded(!expanded)}
             className="absolute bottom-2 right-2 flex items-center justify-center size-6 rounded-full bg-black/10 dark:bg-black/40 hover:bg-black/20 dark:hover:bg-black/60 text-neutral-700 dark:text-neutral-300 transition-all z-10"
             aria-label={expanded ? 'Collapse message' : 'Expand message'}
@@ -110,7 +136,10 @@ const CodeBlock = memo(function CodeBlock({
 
   if (isInline) {
     return (
-      <code className="bg-neutral-200 dark:bg-[#303030] px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+      <code
+        className="bg-neutral-200 dark:bg-[#303030] px-1.5 py-0.5 rounded text-sm font-mono"
+        {...props}
+      >
         {children}
       </code>
     );
@@ -122,11 +151,15 @@ const CodeBlock = memo(function CodeBlock({
     <div className="relative group my-4 rounded-md overflow-hidden bg-neutral-900 text-neutral-100 dark:bg-[#151515] border border-neutral-800">
       <div className="flex items-center justify-between px-4 py-2 bg-neutral-800 dark:bg-[#252525] text-xs font-mono text-neutral-400">
         <span>{match?.[1] || 'text'}</span>
+
         <button
-          onClick={() => {
-            navigator.clipboard.writeText(codeText);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+          type="button"
+          onClick={async () => {
+            const success = await copyToClipboard(codeText);
+            if (success) {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }
           }}
           className="hover:text-neutral-200 transition-colors"
           aria-label="Copy code"
@@ -134,8 +167,9 @@ const CodeBlock = memo(function CodeBlock({
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
         </button>
       </div>
+
       <div className="p-4 overflow-x-auto custom-scrollbar text-sm">
-        <code className={cn("font-mono", className)} {...props}>
+        <code className={cn('font-mono', className)} {...props}>
           {children}
         </code>
       </div>
@@ -150,8 +184,10 @@ const AssistantText = memo(function AssistantText({ text }: { text: string }) {
         <ReactMarkdown
           remarkPlugins={MARKDOWN_PLUGINS}
           components={{
-            pre: ({ children }) => <pre className="p-0 m-0 bg-transparent border-none overflow-visible">{children}</pre>,
-            code: CodeBlock as ElementType
+            pre: ({ children }) => (
+              <pre className="p-0 m-0 bg-transparent border-none overflow-visible">{children}</pre>
+            ),
+            code: CodeBlock as ElementType,
           }}
         >
           {text}
@@ -179,19 +215,22 @@ function ErrorBubble({
 }
 
 /** Map backend phase strings to human-readable status text. */
-const PHASE_TEXT: Record<string, string> = {
+const PHASE_TEXT: Record<RagPhase, string> = {
   idle: 'Thinking...',
   retrieving: 'Searching knowledge base...',
   generating: 'Generating response...',
 };
 
 function ThinkingBubble({ ragPhase = 'idle' }: { ragPhase?: string }) {
-  const text = PHASE_TEXT[ragPhase] ?? PHASE_TEXT.idle;
+  const text = PHASE_TEXT[ragPhase as RagPhase] ?? PHASE_TEXT.idle;
 
   return (
     <div className="flex justify-start">
       <div className="relative text-[14px] flex items-center gap-2 px-1">
-        <span className="font-mono text-neutral-500 animate-cursor-blink text-lg leading-none -translate-y-[1px]">|</span>
+        <span className="font-mono text-neutral-500 animate-pulse text-lg leading-none -translate-y-px">
+          |
+        </span>
+
         <div className="relative w-57.5 h-5">
           <div
             key={text}
@@ -210,13 +249,13 @@ function ThinkingBubble({ ragPhase = 'idle' }: { ragPhase?: string }) {
 }
 
 const MessageItem = memo(
-  function MessageItem({ message, status }: { message: AgentMessage, status?: ChatStatus }) {
+  function MessageItem({ message, status }: { message: AgentMessage; status?: ChatStatus }) {
     const [copied, setCopied] = useState(false);
 
     const fullText = useMemo(() => {
       return message.parts
-        .filter(p => p.type === 'text')
-        .map(p => (p as { text: string }).text)
+        .filter((part): part is Extract<MessagePart, { type: 'text' }> => part.type === 'text')
+        .map((part) => part.text)
         .join('\n');
     }, [message.parts]);
 
@@ -226,32 +265,44 @@ const MessageItem = memo(
           if (part.type === 'error') {
             return <ErrorBubble key={index} title={part.title} message={part.message} />;
           }
+
           if (message.role === 'user') {
             return <UserBubble key={index} text={part.text} />;
           }
+
           return <AssistantText key={index} text={part.text} />;
         })}
-        {message.role === 'assistant' && (
-          <Citations
-            content={message.parts.find((part) => part.type === 'text')?.text ?? ''}
-            sources={message.sources}
-          />
-        )}
+
+        {message.role === 'assistant' && <Citations sources={message.sources} />}
+
         {message.createdAt && (
-          <div className={cn(
-            "flex items-center gap-2 text-[11px] text-muted-foreground px-1 mt-1",
-            message.role === 'user' ? "justify-end" : "justify-start"
-          )}>
-            <span>{parseUtcDate(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <div
+            className={cn(
+              'flex items-center gap-2 text-[11px] text-muted-foreground px-1 mt-1',
+              message.role === 'user' ? 'justify-end' : 'justify-start'
+            )}
+          >
+            <span>
+              {parseUtcDate(message.createdAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+
             {message.role === 'assistant' && (
               <button
+                type="button"
                 disabled={status === 'streaming'}
-                onClick={() => {
-                  navigator.clipboard.writeText(fullText);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
+                onClick={async () => {
+                  const success = await copyToClipboard(fullText);
+
+                  if (success) {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }
                 }}
                 className="hover:text-foreground transition-colors disabled:opacity-50"
+                aria-label="Copy response"
               >
                 {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
               </button>
@@ -274,6 +325,7 @@ const MessageItem = memo(
       previousMessage.parts.length === nextMessage.parts.length &&
       previousMessage.parts.every((part, index) => {
         const nextPart = nextMessage.parts[index];
+
         return (
           part.type === nextPart.type &&
           (part.type === 'text'
@@ -298,24 +350,36 @@ const MessageList = memo(function MessageList({
 }) {
   const isThinking = status === 'streaming' && messages[messages.length - 1]?.role === 'user';
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (bottomRef.current) {
+    const container = containerRef.current;
+    if (!container || !bottomRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+
+    if (isNearBottom) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, status, ragPhase]);
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 scroll-smooth custom-scrollbar">
+    <div
+      ref={containerRef}
+      className="flex-1 min-h-0 overflow-y-auto px-4 py-6 scroll-smooth custom-scrollbar"
+    >
       <div className="mx-auto max-w-3xl flex flex-col gap-6">
         {messages.map((message) => (
           <MessageItem key={message.stableId} message={message} status={status} />
         ))}
+
         {isThinking && (
           <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <ThinkingBubble ragPhase={ragPhase} />
           </div>
         )}
+
         <div ref={bottomRef} className="h-px" />
       </div>
     </div>
@@ -333,27 +397,33 @@ function InputBar({
   onChange,
   disabled,
 }: {
-  onSend?: (m: { role: 'user'; content: string }) => void;
+  onSend?: (message: { role: 'user'; content: string }) => void;
   onStop?: () => void;
   status?: ChatStatus;
   placeholder?: string;
   attachments?: AgentChatProps['attachments'];
   className?: string;
   value?: string;
-  onChange?: (v: string) => void;
+  onChange?: (value: string) => void;
   disabled?: boolean;
 }) {
   const [internal, setInternal] = useState('');
   const config = useConfig();
+
   const isControlled = controlledValue !== undefined;
   const input = isControlled ? controlledValue : internal;
+
   const setInput = useCallback(
-    (v: string) => {
-      if (isControlled) onChange?.(v);
-      else setInternal(v);
+    (value: string) => {
+      if (isControlled) {
+        onChange?.(value);
+      } else {
+        setInternal(value);
+      }
     },
     [isControlled, onChange]
   );
+
   const ref = useRef<HTMLTextAreaElement>(null);
   const isStreaming = status === 'streaming' || status === 'submitted';
   const hasInput = input.trim().length > 0;
@@ -361,7 +431,9 @@ function InputBar({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
     el.style.height = 'auto';
+
     const next = Math.min(el.scrollHeight, 200);
     el.style.height = `${next}px`;
     el.style.overflowY = el.scrollHeight > 200 ? 'auto' : 'hidden';
@@ -369,7 +441,9 @@ function InputBar({
 
   const submit = useCallback(() => {
     const trimmed = input.trim();
+
     if (!trimmed || isStreaming || disabled) return;
+
     onSend?.({ role: 'user', content: trimmed });
     setInput('');
   }, [input, isStreaming, disabled, onSend, setInput]);
@@ -380,15 +454,19 @@ function InputBar({
         {attachments?.isUploading && (attachments.uploadingCount ?? 0) > 0 && (
           <div className="self-start inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-[#303030] border border-neutral-200 dark:border-[#404040] rounded-full text-xs font-medium text-neutral-600 dark:text-neutral-300 animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none motion-reduce:transition-none">
             <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin motion-reduce:animate-none" />
-            <span>Uploading {attachments.uploadingCount} file{attachments.uploadingCount === 1 ? '' : 's'}...</span>
+            <span>
+              Uploading {attachments.uploadingCount} file
+              {attachments.uploadingCount === 1 ? '' : 's'}...
+            </span>
           </div>
         )}
+
         <div
           className="relative cursor-text rounded-3xl bg-white dark:bg-[#303030] shadow-sm border border-neutral-200 dark:border-transparent transition-all has-[textarea:focus]:ring-2 has-[textarea:focus]:ring-neutral-200 dark:has-[textarea:focus]:ring-[#515151]"
-          onClick={(e) => {
+          onClick={(event) => {
             if (
-              e.target === e.currentTarget ||
-              !(e.target as HTMLElement).closest('button, textarea')
+              event.target === event.currentTarget ||
+              !(event.target as HTMLElement).closest('button, textarea')
             ) {
               ref.current?.focus();
             }
@@ -398,10 +476,10 @@ function InputBar({
             <textarea
               ref={ref}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
                   submit();
                 }
               }}
@@ -415,6 +493,7 @@ function InputBar({
               )}
             />
           </div>
+
           <div className="flex items-center justify-between gap-3 px-2 pt-1 pb-2">
             <div className="flex items-center gap-1 min-w-0">
               {attachments?.onAttach && (
@@ -433,13 +512,17 @@ function InputBar({
                 </button>
               )}
             </div>
+
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 aria-label={isStreaming ? 'Stop' : 'Send'}
                 onClick={() => {
-                  if (isStreaming) onStop?.();
-                  else if (hasInput) submit();
+                  if (isStreaming) {
+                    onStop?.();
+                  } else if (hasInput) {
+                    submit();
+                  }
                 }}
                 disabled={!isStreaming && !hasInput}
                 className={cn(
@@ -459,6 +542,8 @@ function InputBar({
   );
 }
 
+// --- Main Component ---
+
 export const AgentChat = memo(function AgentChat({
   messages,
   onSend,
@@ -477,6 +562,7 @@ export const AgentChat = memo(function AgentChat({
 
   const messagesWithError: AgentMessage[] = useMemo(() => {
     if (!error) return messages;
+
     return [
       ...messages,
       {
@@ -496,43 +582,6 @@ export const AgentChat = memo(function AgentChat({
 
   const isEmpty = !error && messages.length === 0;
   const isCenteredEmpty = isEmpty && emptyStatePosition === 'center';
-
-  const renderSuggestions = () => {
-    if (!suggestedDocuments) return null;
-
-    if (suggestedDocuments.length === 0) {
-      return (
-        <div className="flex justify-center mt-4">
-          <p className="text-sm text-muted-foreground text-center">
-            Upload documents in the Knowledge Base to get started
-          </p>
-        </div>
-      );
-    }
-
-    let suggestions: string[] = [];
-    if (suggestedDocuments.length === 1) {
-      const file = suggestedDocuments[0];
-      suggestions = [`Summarize ${file}`, `What are the key points in ${file}?`];
-    } else {
-      suggestions = ["Compare the main ideas across my documents"];
-    }
-
-    return (
-      <div className="flex flex-wrap justify-center gap-2 mt-4">
-        {suggestions.map((suggestion, i) => (
-          <button
-            key={i}
-            onClick={() => onSend?.({ role: 'user', content: suggestion })}
-            disabled={disabled}
-            className="px-4 py-2 text-sm rounded-full border border-neutral-200 dark:border-neutral-800 bg-white hover:bg-neutral-50 dark:bg-[#202020] dark:hover:bg-[#252525] text-neutral-700 dark:text-neutral-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {suggestion}
-          </button>
-        ))}
-      </div>
-    );
-  };
 
   const inputBarNode: ReactNode = (
     <InputBar
@@ -556,9 +605,63 @@ export const AgentChat = memo(function AgentChat({
             <h1 className="text-3xl font-semibold text-center text-foreground">
               How can I help you?
             </h1>
+
             <div className="flex flex-col gap-4">
               {inputBarNode}
-              {renderSuggestions()}
+
+              {suggestedDocuments && (
+                <div className="flex flex-wrap justify-center gap-2 mt-4">
+                  {suggestedDocuments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center">
+                      Upload documents in the Knowledge Base to get started
+                    </p>
+                  ) : suggestedDocuments.length === 1 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSend?.({
+                            role: 'user',
+                            content: `Summarize ${suggestedDocuments[0]}`,
+                          })
+                        }
+                        disabled={disabled}
+                        className="px-4 py-2 text-sm rounded-full border border-neutral-200 dark:border-neutral-800 bg-white hover:bg-neutral-50 dark:bg-[#202020] dark:hover:bg-[#252525] text-neutral-700 dark:text-neutral-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Summarize {suggestedDocuments[0]}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSend?.({
+                            role: 'user',
+                            content: `What are the key points in ${suggestedDocuments[0]}?`,
+                          })
+                        }
+                        disabled={disabled}
+                        className="px-4 py-2 text-sm rounded-full border border-neutral-200 dark:border-neutral-800 bg-white hover:bg-neutral-50 dark:bg-[#202020] dark:hover:bg-[#252525] text-neutral-700 dark:text-neutral-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        What are the key points in {suggestedDocuments[0]}?
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSend?.({
+                          role: 'user',
+                          content: 'Compare the main ideas across my documents',
+                        })
+                      }
+                      disabled={disabled}
+                      className="px-4 py-2 text-sm rounded-full border border-neutral-200 dark:border-neutral-800 bg-white hover:bg-neutral-50 dark:bg-[#202020] dark:hover:bg-[#252525] text-neutral-700 dark:text-neutral-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Compare the main ideas across my documents
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1,5 +1,8 @@
-import { Document } from '@/lib/types';
+import type { Document } from '@/lib/types';
 import { create } from 'zustand';
+
+// Stable reference to prevent unnecessary re-renders in selectors
+export const EMPTY_DOCUMENTS: Document[] = [];
 
 interface DocumentStore {
   documentsBySession: Record<string, Document[]>;
@@ -11,7 +14,7 @@ interface DocumentStore {
   markDeleting: (sessionId: string, documentId: string) => void;
 }
 
-export const useDocumentStore = create<DocumentStore>((set) => ({
+export const useDocumentStore = create<DocumentStore>()((set) => ({
   documentsBySession: {},
 
   setDocuments: (sessionId, docs) =>
@@ -19,7 +22,6 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
       const existing = state.documentsBySession[sessionId] || [];
       const tempDocs = existing.filter((d) => d.id.startsWith('temp-'));
 
-      // Merge: keeping tempDocs that are still optimistic, plus the real docs
       return {
         documentsBySession: {
           ...state.documentsBySession,
@@ -42,7 +44,6 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
   confirmUpload: (sessionId, confirmedDocs, tempIds) =>
     set((state) => {
       const existing = state.documentsBySession[sessionId] || [];
-      // Remove temp docs by ID, not by filename
       const filtered = existing.filter(
         (d) => !(d.id.startsWith('temp-') && tempIds.includes(d.id))
       );

@@ -3,37 +3,35 @@
 import { deleteDocumentAction, getDocuments, retryDocumentAction } from '@/lib/api';
 import { useConfig } from '@/lib/config';
 import type { Document } from '@/lib/types';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { useDocumentStore } from './document-store';
+import { EMPTY_DOCUMENTS, useDocumentStore } from './document-store';
 
-const EMPTY_DOCUMENTS: Document[] = [];
-const pollingRefs = new Map<string, number>();
 const pollingIntervals = new Map<string, ReturnType<typeof setTimeout>>();
 const pollingStartTimes = new Map<string, number>();
 const documentRequests = new Map<string, Promise<Document[] | null>>();
 
-type BatchUploadResult = {
-  filename: string;
-  ok: boolean;
-  document?: Document;
-  error?: { code?: string; message?: string };
-};
+const POLLING_FAST_INTERVAL_MS = 1000;
+const POLLING_SLOW_INTERVAL_MS = 3000;
+const POLLING_FAST_WINDOW_MS = 15000;
 
-type BatchUploadResponse = {
-  results?: BatchUploadResult[];
-  error?: { code?: string; message?: string };
-};
+function hasPendingProcessing(documents: Document[]): boolean {
+  return documents.some(
+    (document) => document.status === 'processing' || document.status === 'uploaded'
+  );
+}
 
-/** Shares one in-flight document request between the sidebar and document manager. */
+/** Shares one in-flight document request between multiple consumers. */
 function refreshDocuments(sessionId: string): Promise<Document[] | null> {
   const inFlight = documentRequests.get(sessionId);
   if (inFlight) return inFlight;
 
   const request = getDocuments(sessionId)
     .then((documents) => {
-      if (documents) useDocumentStore.getState().setDocuments(sessionId, documents);
+      if (documents) {
+        useDocumentStore.getState().setDocuments(sessionId, documents);
+      }
+
       return documents;
     })
     .finally(() => {
@@ -44,41 +42,45 @@ function refreshDocuments(sessionId: string): Promise<Document[] | null> {
   return request;
 }
 
-function ensurePolling(sessionId: string) {
-  pollingStartTimes.set(sessionId, Date.now());
-
+/**
+ * Starts one polling loop per session while documents are being processed.
+ *
+ * Polling is intentionally session-scoped and independent from component
+ * lifetime so uploads/retries can start it directly without maintaining
+ * artificial consumer reference counts.
+ */
+function ensurePolling(sessionId: string): void {
   if (pollingIntervals.has(sessionId)) return;
 
-  const refCount = (pollingRefs.get(sessionId) ?? 0) + 1;
-  pollingRefs.set(sessionId, refCount);
+  pollingStartTimes.set(sessionId, Date.now());
 
-  if (refCount === 1) {
-    const poll = () => {
-      const docs = useDocumentStore.getState().documentsBySession[sessionId] ?? [];
-      const stillProcessing = docs.some(
-        (d) => d.status === 'processing' || d.status === 'uploaded'
-      );
-      if (!stillProcessing) {
-        pollingIntervals.delete(sessionId);
-        pollingRefs.delete(sessionId);
-        pollingStartTimes.delete(sessionId);
-        return;
-      }
-      void refreshDocuments(sessionId).catch(() => {});
+  const poll = () => {
+    const documents = useDocumentStore.getState().documentsBySession[sessionId] ?? EMPTY_DOCUMENTS;
 
-      const startTime = pollingStartTimes.get(sessionId) ?? Date.now();
-      const elapsed = Date.now() - startTime;
-      const delay = elapsed < 15000 ? 1000 : 3000;
-      pollingIntervals.set(sessionId, setTimeout(poll, delay));
-    };
+    if (!hasPendingProcessing(documents)) {
+      pollingIntervals.delete(sessionId);
+      pollingStartTimes.delete(sessionId);
+      return;
+    }
 
-    pollingIntervals.set(sessionId, setTimeout(poll, 1000));
-  }
+    void refreshDocuments(sessionId).catch(() => {
+      // Keep polling; a transient refresh failure should not stop processing tracking.
+    });
+
+    const startTime = pollingStartTimes.get(sessionId) ?? Date.now();
+    const elapsed = Date.now() - startTime;
+    const delay =
+      elapsed < POLLING_FAST_WINDOW_MS ? POLLING_FAST_INTERVAL_MS : POLLING_SLOW_INTERVAL_MS;
+
+    pollingIntervals.set(sessionId, setTimeout(poll, delay));
+  };
+
+  pollingIntervals.set(sessionId, setTimeout(poll, POLLING_FAST_INTERVAL_MS));
 }
 
 export function useDocuments(sessionId: string | null, initialDocuments?: Document[]) {
-  const router = useRouter();
   const config = useConfig();
+
   const documents = useDocumentStore((state) =>
     sessionId ? (state.documentsBySession[sessionId] ?? EMPTY_DOCUMENTS) : EMPTY_DOCUMENTS
   );
@@ -88,6 +90,7 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
   const revertUpload = useDocumentStore((state) => state.revertUpload);
   const removeOptimistic = useDocumentStore((state) => state.removeOptimistic);
   const markDeleting = useDocumentStore((state) => state.markDeleting);
+
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [isPending, startTransition] = useTransition();
@@ -101,35 +104,15 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
     }
 
     void refreshDocuments(sessionId).catch(() => {
-      // Preserve the last known store value. Route boundaries handle navigation failures.
+      // Preserve the last known store value.
     });
   }, [initialDocuments, sessionId, setDocuments]);
 
   useEffect(() => {
-    if (!sessionId) return;
-
-    const currentDocs = useDocumentStore.getState().documentsBySession[sessionId] ?? [];
-    const hasProcessing = currentDocs.some(
-      (document) => document.status === 'processing' || document.status === 'uploaded'
-    );
-    if (!hasProcessing) return;
+    if (!sessionId || !hasPendingProcessing(documents)) return;
 
     ensurePolling(sessionId);
-
-    return () => {
-      const nextRefCount = (pollingRefs.get(sessionId) ?? 1) - 1;
-      if (nextRefCount > 0) {
-        pollingRefs.set(sessionId, nextRefCount);
-        return;
-      }
-
-      const interval = pollingIntervals.get(sessionId);
-      if (interval) clearTimeout(interval);
-      pollingIntervals.delete(sessionId);
-      pollingRefs.delete(sessionId);
-      pollingStartTimes.delete(sessionId);
-    };
-  }, [sessionId]);
+  }, [documents, sessionId]);
 
   const uploadFiles = async (files: FileList | File[]) => {
     if (!sessionId || !files.length || !config) return;
@@ -142,8 +125,9 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
     }
 
     const formData = new FormData();
+    const selectedFiles = Array.from(files);
 
-    for (const file of Array.from(files)) {
+    for (const file of selectedFiles) {
       if (file.size > config.max_file_size_mb * 1024 * 1024) {
         toast.error(
           `One or more files exceed the maximum allowed file size (${config.max_file_size_mb}MB).`
@@ -152,6 +136,7 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
       }
 
       const extension = `.${file.name.split('.').pop()?.toLowerCase()}`;
+
       if (!config.accepted_extensions.includes(extension)) {
         toast.error(
           `Unsupported file type. Supported types: ${config.accepted_extensions.join(', ')}.`
@@ -163,26 +148,34 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
     }
 
     const timestamp = Date.now();
-    const optimisticDocuments: Document[] = Array.from(files).map((file, index) => ({
+
+    const optimisticDocuments: Document[] = selectedFiles.map((file, index) => ({
       id: `temp-${timestamp}-${index}`,
       original_file_name: file.name,
       status: 'processing',
       created_at: new Date().toISOString(),
     }));
+
     const temporaryIds = optimisticDocuments.map((document) => document.id);
 
     setIsUploading(true);
-    setUploadingCount(files.length);
+    setUploadingCount(selectedFiles.length);
     applyUploadOptimistic(sessionId, optimisticDocuments);
     ensurePolling(sessionId);
 
     try {
-      const response = await fetch(`/api/upload?session=${sessionId}`, { method: 'POST', body: formData });
+      const response = await fetch(`/api/upload?session=${encodeURIComponent(sessionId)}`, {
+        method: 'POST',
+        body: formData,
+      });
+
       const result: BatchUploadResponse = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         revertUpload(sessionId, temporaryIds);
+
         const code = result.error?.code;
+
         if (code === 'too_many_files') {
           toast.error(
             `You can only upload a maximum of ${config.max_files_per_request} files at once.`
@@ -202,34 +195,49 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
         } else {
           toast.error(result.error?.message || 'Upload failed.');
         }
+
         return;
       }
 
       const results = result.results ?? [];
+
       const confirmedDocuments = results.flatMap((result) =>
         result.ok && result.document ? [result.document] : []
       );
+
+      const confirmedTempIds = temporaryIds.filter(
+        (_, index) => results[index]?.ok && results[index]?.document
+      );
+
       const failedTemporaryIds = temporaryIds.filter(
         (_, index) => !results[index]?.ok || !results[index]?.document
       );
 
-      if (confirmedDocuments.length) {
-        const confirmedTempIds = temporaryIds.filter(
-          (_, index) => results[index]?.ok && results[index]?.document
-        );
+      if (confirmedDocuments.length > 0) {
         confirmUpload(sessionId, confirmedDocuments, confirmedTempIds);
+
         toast.success(
-          confirmedDocuments.length === 1 ? 'Document uploaded successfully.' : 'Documents uploaded successfully.'
+          confirmedDocuments.length === 1
+            ? 'Document uploaded successfully.'
+            : 'Documents uploaded successfully.'
         );
-        router.refresh();
       }
 
-      if (failedTemporaryIds.length) {
+      if (failedTemporaryIds.length > 0) {
         revertUpload(sessionId, failedTemporaryIds);
+
         const failedResults = results.filter((result) => !result.ok || !result.document);
+
         const count = failedResults.length;
-        const messages = failedResults.map(r => `${r.filename} (${r.error?.message || 'unknown error'})`);
+        const messages = failedResults.map(
+          (result) => `${result.filename} (${result.error?.message || 'unknown error'})`
+        );
+
         toast.error(`${count} file${count === 1 ? '' : 's'} failed: ${messages.join(', ')}`);
+      }
+
+      if (hasPendingProcessing(confirmedDocuments)) {
+        ensurePolling(sessionId);
       }
     } catch {
       revertUpload(sessionId, temporaryIds);
@@ -244,37 +252,76 @@ export function useDocuments(sessionId: string | null, initialDocuments?: Docume
     if (!sessionId) return false;
 
     markDeleting(sessionId, documentId);
+
     const result = await deleteDocumentAction(documentId, sessionId);
+
     if (result.success) {
       removeOptimistic(sessionId, documentId);
-      router.refresh();
       return true;
     }
 
     void refreshDocuments(sessionId).catch(() => {
       toast.error('Unable to refresh documents after the failed deletion.');
     });
+
     return false;
   };
 
   const handleDelete = (documentId: string) => {
     startTransition(async () => {
-      if (!(await deleteDocument(documentId))) toast.error('Failed to delete document.');
-    });
-  };
-
-  const handleRetry = (documentId: string) => {
-    startTransition(async () => {
-      const result = await retryDocumentAction(documentId, sessionId!);
-      if (!result.success) {
-        toast.error(result.error?.message || 'Failed to retry document.');
-      } else {
-        toast.success('Document re-queued for processing.');
-        void refreshDocuments(sessionId!).catch(() => {});
-        router.refresh();
+      if (!(await deleteDocument(documentId))) {
+        toast.error('Failed to delete document.');
       }
     });
   };
 
-  return { documents, isUploading, uploadingCount, isPending, uploadFiles, handleDelete, handleRetry, deleteDocument };
+  const handleRetry = (documentId: string) => {
+    if (!sessionId) return;
+
+    startTransition(async () => {
+      const result = await retryDocumentAction(documentId, sessionId);
+
+      if (!result.success) {
+        toast.error(result.error?.message || 'Failed to retry document.');
+        return;
+      }
+
+      toast.success('Document re-queued for processing.');
+
+      ensurePolling(sessionId);
+
+      void refreshDocuments(sessionId).catch(() => {
+        // Polling will retry the refresh automatically.
+      });
+    });
+  };
+
+  return {
+    documents,
+    isUploading,
+    uploadingCount,
+    isPending,
+    uploadFiles,
+    handleDelete,
+    handleRetry,
+    deleteDocument,
+  };
 }
+
+type BatchUploadResult = {
+  filename: string;
+  ok: boolean;
+  document?: Document;
+  error?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+type BatchUploadResponse = {
+  results?: BatchUploadResult[];
+  error?: {
+    code?: string;
+    message?: string;
+  };
+};

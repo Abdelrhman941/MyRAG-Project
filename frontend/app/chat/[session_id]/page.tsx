@@ -1,5 +1,5 @@
 import { MessageFeed } from '@/features/chat/message-feed';
-import { getMessages, getSession } from '@/lib/api';
+import { getDocuments, getMessages, getSession } from '@/lib/api';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
@@ -19,13 +19,23 @@ export const dynamic = 'force-dynamic';
 export default async function ChatSessionPage({ params }: ChatSessionPageProps) {
   const resolvedParams = await params;
   const sessionId = resolvedParams.session_id;
-  const initialMessages = await getMessages(sessionId);
+
+  // ✅ Performance Win: Fetch messages and documents in parallel on the server
+  const [initialMessages, initialDocuments] = await Promise.all([
+    getMessages(sessionId),
+    getDocuments(sessionId),
+  ]);
 
   if (!initialMessages) notFound();
 
   return (
     <div className="flex flex-col h-full bg-muted/20">
-      <MessageFeed key={sessionId} initialMessages={initialMessages} sessionId={sessionId} />
+      <MessageFeed
+        key={sessionId} // ✅ Critical: Resets component state on session switch
+        initialMessages={initialMessages}
+        initialDocuments={initialDocuments ?? []} // ✅ Prevents client-side refetch
+        sessionId={sessionId}
+      />
     </div>
   );
 }
