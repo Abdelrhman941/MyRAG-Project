@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     # ------------ Upload limits ------------
     MAX_FILES_PER_REQUEST: Annotated[int, Field(gt=0)] = 10
     UPLOAD_RATE_LIMIT: str = "10/hour"
+    CHAT_RATE_LIMIT: str = "30/minute"
     UPLOAD_CONCURRENCY: Annotated[int, Field(gt=0)] = 4
 
     # ------------ Chunking ------------

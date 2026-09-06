@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Request, Response
 
 from ..dependencies import SettingsDep
+
+logger = logging.getLogger(__name__)
 
 health_router = APIRouter(tags=["health"])
 
@@ -60,8 +64,9 @@ async def readyz(
             response.status_code = 503
             return {"status": "qdrant_not_ready"}
 
-    except Exception as exc:
+    except Exception:
+        logger.exception("Qdrant health check failed")
         response.status_code = 503
-        return {"status": "qdrant_unavailable", "detail": str(exc)}
+        return {"status": "qdrant_unavailable"}
 
     return {"status": "ready"}

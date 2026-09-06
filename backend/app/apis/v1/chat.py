@@ -9,6 +9,7 @@ from fastapi import (
     BackgroundTasks,
     File,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -140,9 +141,11 @@ async def delete_session(
     "/sessions/{session_id}/messages/stream",
     response_class=StreamingResponse,
 )
+@limiter.limit(lambda: get_settings().CHAT_RATE_LIMIT)
 async def ask_question_stream(
+    request: Request,
     session: ValidSessionDep,
-    request: ChatRequest,
+    payload: ChatRequest,
     chat_service: ChatServiceDep,
     background_tasks: BackgroundTasks,
 ) -> StreamingResponse:
@@ -152,7 +155,7 @@ async def ask_question_stream(
         async for event in chat_service.answer_stream(
             session["id"],
             session,
-            request.question,
+            payload.question,
             background_tasks,
         ):
             if event["event"] == "ping":
@@ -178,9 +181,11 @@ async def ask_question_stream(
     "/sessions/{session_id}/messages",
     response_model=ChatAnswer,
 )
+@limiter.limit(lambda: get_settings().CHAT_RATE_LIMIT)
 async def ask_question(
+    request: Request,
     session: ValidSessionDep,
-    request: ChatRequest,
+    payload: ChatRequest,
     chat_service: ChatServiceDep,
     background_tasks: BackgroundTasks,
 ) -> ChatAnswer:
@@ -188,7 +193,7 @@ async def ask_question(
     return await chat_service.answer(
         session["id"],
         session,
-        request.question,
+        payload.question,
         background_tasks,
     )
 
@@ -201,6 +206,7 @@ async def ask_question(
 )
 @limiter.limit(lambda: get_settings().UPLOAD_RATE_LIMIT)
 async def upload_document(
+    request: Request,
     session: ValidSessionDep,
     file: UploadFile,
     doc_service: DocumentServiceDep,
@@ -228,6 +234,7 @@ async def upload_document(
 )
 @limiter.limit(lambda: get_settings().UPLOAD_RATE_LIMIT)
 async def upload_batch(
+    request: Request,
     session: ValidSessionDep,
     files: Annotated[list[UploadFile], File(...)],
     doc_service: DocumentServiceDep,

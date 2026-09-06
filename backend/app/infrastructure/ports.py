@@ -79,14 +79,6 @@ class VectorStorePort(Protocol):
 class FileStoragePort(Protocol):
     """Port for document-file storage."""
 
-    async def save(
-        self,
-        filename: str,
-        content: bytes,
-    ) -> None:
-        """Persist document content."""
-        ...
-
     async def read(
         self,
         filename: str,
@@ -154,13 +146,6 @@ class SessionRepositoryPort(Protocol):
         session_id: UUID,
     ) -> int:
         """Count messages in a session."""
-        ...
-
-    async def list_messages(
-        self,
-        session_id: UUID,
-    ) -> list[MessageData]:
-        """List all session messages."""
         ...
 
     async def get_messages(

@@ -135,17 +135,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         logger.info("Application shutdown started")
 
-        model_load_task = getattr(
+        task_to_cancel = getattr(
             app.state,
             "model_load_task",
             None,
         )
 
-        if model_load_task is not None and not model_load_task.done():
-            model_load_task.cancel()
+        if task_to_cancel is not None and not task_to_cancel.done():
+            task_to_cancel.cancel()
 
             with suppress(asyncio.CancelledError):
-                await model_load_task
+                await task_to_cancel
 
         arq_pool = getattr(
             app.state,

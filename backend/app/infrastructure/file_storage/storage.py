@@ -31,22 +31,6 @@ class DocumentStorage:
 
         return path
 
-    async def save(self, filename: str, content: bytes) -> None:
-        """Write document content to storage."""
-        path = self._get_path(filename)
-
-        try:
-            async with aiofiles.open(path, "wb") as file:
-                await file.write(content)
-        except OSError as exc:
-            logger.exception(
-                "Failed to save document %s",
-                filename,
-            )
-            raise StorageError(
-                message="Failed to save document.",
-            ) from exc
-
     async def read(self, filename: str) -> bytes:
         """Read document content from storage."""
         path = self._get_path(filename)

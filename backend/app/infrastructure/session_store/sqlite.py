@@ -150,24 +150,6 @@ class SqliteSessionRepository:
 
         return result.scalar_one() or 0
 
-    async def list_messages(
-        self,
-        session_id: UUID,
-    ) -> list[MessageData]:
-        """List all messages in chronological order."""
-        statement = (
-            select(ChatMessageModel)
-            .where(ChatMessageModel.session_id == session_id)
-            .order_by(
-                ChatMessageModel.created_at.asc(),
-                ChatMessageModel.id.asc(),
-            )
-        )
-
-        result = await self.session.execute(statement)
-
-        return [self._message_to_dict(message) for message in result.scalars().all()]
-
     async def get_messages(
         self,
         session_id: UUID,
