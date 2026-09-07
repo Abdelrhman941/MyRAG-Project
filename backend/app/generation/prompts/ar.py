@@ -1,6 +1,5 @@
 from . import PromptTemplates
 
-
 ARABIC_PROMPTS = PromptTemplates(
     chat_system=(
         "أنت مساعد ذكاء اصطناعي مفيد يجيب عن الأسئلة بالاعتماد على "

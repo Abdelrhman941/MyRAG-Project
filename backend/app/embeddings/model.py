@@ -41,13 +41,18 @@ class EmbeddingModel:
             repo_id=model_name,
             revision=pinned_sha,
             allow_patterns=allow,
-            # removed "*onnx*" from ignore_patterns to allow ONNX weights to load
+            # ONNX weights are allowed to download so a future ONNX-runtime
+            # switch needs no re-download.
         )
 
-        self._model = BGEM3FlagModel(model_path, use_fp16=True, device="cpu")
+        # NOTE: use_fp16=False is deliberate on CPU. fp16 inference on CPU
+        # goes through fp32 conversion under the hood, so it is equal or
+        # SLOWER than plain fp32 — fp16 only pays off on GPU. If you move to a
+        # GPU deployment, flip this back to True.
+        self._model = BGEM3FlagModel(model_path, use_fp16=False, device="cpu")
         self._max_length = settings.CHUNK_SIZE_TOKENS
 
-        # Warmup
+        # Warmup so the first real request does not pay allocator/JIT cost.
         self._model.encode(["warmup"], batch_size=1, max_length=self._max_length)
 
         logger.info(f"Embedding model '{model_name}' loaded.")
