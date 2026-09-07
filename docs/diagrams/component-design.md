@@ -19,10 +19,10 @@ flowchart LR
     end
 
     subgraph Ports["app/infrastructure/ports.py — typing.Protocol"]
-        FSP[FileStoragePort<br/>save · read · delete · move_from]
+        FSP[FileStoragePort<br/>read · delete · move_from]
         VSP[VectorStorePort<br/>ensure_collection · upsert_chunks<br/>query · delete_by_document]
         LLP[LLMProviderPort<br/>generate messages → answer]
-        SRP[SessionRepositoryPort<br/>create/get/list sessions<br/>add/list messages · update summary]
+        SRP[SessionRepositoryPort<br/>create/get/list sessions<br/>add/get messages · update summary]
     end
 
     subgraph Adapters["app/infrastructure — concrete adapters"]

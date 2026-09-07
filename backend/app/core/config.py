@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # ------------ Application ------------
     APP_NAME: str = _PROJECT_METADATA.get("name", "RAG Backend")
-    APP_VERSION: str = _PROJECT_METADATA.get("version", "0.1.0")
+    APP_VERSION: str = _PROJECT_METADATA.get("version", "1.0.0")
     APP_DESCRIPTION: str = _PROJECT_METADATA.get("description", "")
     ENVIRONMENT: Environment = Environment.LOCAL
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/rag.db"
