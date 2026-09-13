@@ -1,11 +1,10 @@
 # Software Design Document (SDD) — RAG System
 
 > **This document is the Single Source of Truth (SST).**
-> If code and this document disagree, the code is wrong — fix the code or
-> explicitly update this document in the same change.
-> To change a feature's behavior, **edit the spec first**, then let the agent
-> re-implement from the spec. This eliminates hallucination, maintains context,
-> and keeps development velocity high (you review and verify; the agent implements).
+> If the implementation disagrees with this document, do not silently choose one.
+> Determine which represents the intended behavior, then update the implementation
+> and/or this document in the same change so they remain consistent.
+> To change a feature's behavior, **edit the spec first**, then implement from the spec.
 
 Parent: [00-index.md](00-index.md) · Rules: [../AGENTS.md](../AGENTS.md)
 
@@ -36,15 +35,20 @@ flowchart LR
         SVC[services layer]
         PIPE[pipeline packages<br/>parsers · chunking · embeddings · retrieval · generation · memory]
         INFRA[infrastructure adapters<br/>ports & adapters]
+        WRK[ARQ Worker]
     end
     subgraph External
         DB[(SQLite)]
         FS[(Filesystem)]
         QD[(Qdrant)]
+        RD[(Redis)]
         LLM[[External LLM API]]
     end
     UI -->|HTTP/JSON| API --> SVC --> PIPE --> INFRA
-    INFRA --> DB & FS & QD & LLM
+    INFRA --> DB & FS & QD & RD & LLM
+    API -.->|enqueue| RD
+    RD -.->|job| WRK
+    WRK --> SVC
 ```
 
 ---
@@ -54,9 +58,10 @@ flowchart LR
 Full detail: [diagrams/component-design.md](diagrams/component-design.md).
 
 - All external systems behind **ports** (`typing.Protocol`) in `app/infrastructure/ports.py`.
-- **Factories** in `app/dependencies.py` select adapters from `Settings`.
+- **App-scoped singletons** (`QdrantVectorStore`, `httpx.AsyncClient`, `DocumentStorage`, `ArqRedis`) are created during the FastAPI lifespan, stored on `app.state`, and injected via `app/dependencies.py`.
 - Communication: synchronous in-process calls between modules; HTTP only at the
   outer boundary (client ↔ backend, backend ↔ LLM API, backend ↔ Qdrant).
+- **Concurrency:** CPU-bound work (parsing, chunking, embeddings) is offloaded to `asyncio.to_thread` to prevent blocking the event loop. Database relies on native constraints (e.g., UNIQUE on content hash) rather than application-level locks. Ingestion concurrency is constrained by the ARQ Worker max jobs to protect the CPU-bound encoder.
 
 ---
 
@@ -65,15 +70,16 @@ Full detail: [diagrams/component-design.md](diagrams/component-design.md).
 - Ingestion: [diagrams/data-flow-ingestion.md](diagrams/data-flow-ingestion.md)
 - Query: [diagrams/data-flow-query.md](diagrams/data-flow-query.md)
 
+**Application lifecycle:**
+`Server boot → FastAPI lifespan context triggers BGE-M3 background load & ARQ pool creation → /readyz returns 200 when complete`
+
+**Worker lifecycle:**
+`Worker boot → ARQ on_startup triggers BGE-M3 background load & recovery sweep → listens for jobs`
+
 **Ingestion lifecycle:**
 `Upload → validate (type/size/rate) → stream to temp + SHA-256 → dedup check →
-DB record (status=uploaded) → move to final path → background: parse → chunk →
-embed (BGE-M3 dense+sparse) → upsert Qdrant → status=ready (or failed)`
-
-**Query lifecycle:**
-`Question → load session (short-term window + rolling summary) → embed query →
-Qdrant hybrid query (Query API fusion) → assemble prompt (system + memory +
-chunks + question) → external LLM → persist messages → answer`
+DB record (status=uploaded) → move to final path → enqueue ARQ job → worker picks up → parse → chunk →
+embed (BGE-M3 dense+sparse on CPU, bounded by CHUNK_SIZE_TOKENS) → upsert Qdrant → status=ready (or failed)`
 
 ---
 
@@ -82,13 +88,16 @@ chunks + question) → external LLM → persist messages → answer`
 Full detail: [diagrams/data-schema.md](diagrams/data-schema.md).
 
 **SQLite (SQLAlchemy + Alembic):**
-- `documents` ✅ implemented — id (UUID PK), original_file_name, content_hash (UNIQUE), document_type, status, created_at
-- `chat_sessions` ✅ — id (UUID PK), title, summary (nullable), created_at, updated_at
-- `chat_messages` ✅ — id (UUID PK), session_id (FK → chat_sessions), role, content, created_at
+- `documents` ✅ implemented — id (UUID PK), original_file_name, content_hash (UNIQUE constraint), document_type, status, file_size_bytes, created_at, session_id
+- `chat_sessions` ✅ — id (UUID PK), title, summary (nullable), summarized_message_count (int), created_at, updated_at
+- `chat_messages` ✅ — id (UUID PK), session_id (FK → chat_sessions), role, content, sources (JSON, nullable), created_at (Note: Both ORM and internal Pydantic models retain `sources`).
 
 **Qdrant:**
 - Collection `chunks` ✅ — dense vector (BGE-M3, 1024-dim) + sparse vector; payload: document_id, chunk_index, text, original_file_name
 - Collection `chat_memory` 🔒 deferred (semantic long-term memory stage)
+
+**Redis (ARQ):**
+- Transient queues for ingestion jobs.
 
 ---
 
@@ -96,20 +105,30 @@ Full detail: [diagrams/data-schema.md](diagrams/data-schema.md).
 
 Full detail: [diagrams/api-interactions.md](diagrams/api-interactions.md).
 
-| Endpoint | Status | Purpose |
-|---|---|---|
-| `GET /` | ✅ | App metadata |
-| `POST /api/v1/chat/sessions/{id}/documents` | ✅ | Upload one document |
-| `POST /api/v1/chat/sessions/{id}/documents/batch` | ✅ | Upload up to 10 files, rate-limited 10/hour/IP |
-| `GET /api/v1/chat/sessions/{id}/documents` | ✅ | List documents |
-| `DELETE /api/v1/documents/{id}` | ✅ | Delete document + its vectors |
-| `POST /api/v1/chat/sessions` | ✅ | Create chat session |
-| `GET /api/v1/chat/sessions` | ✅ | List sessions |
-| `DELETE /api/v1/chat/sessions/{id}` | ✅ | Delete session + docs + vectors |
-| `GET /api/v1/chat/sessions/{id}/messages` | ✅ | Session history |
-| `POST /api/v1/chat/sessions/{id}/messages` | ✅ | Ask question → RAG answer |
+| Endpoint                                          | Status | Purpose                                                  |
+| ------------------------------------------------- | ------ | -------------------------------------------------------- |
+| `GET /`                                           | ✅      | App metadata                                             |
+| `GET /healthz`                                    | ✅      | Liveness probe (always 200 ok)                           |
+| `GET /readyz`                                     | ✅      | Readiness probe (503 while warming, 200 when ready)      |
+| `GET /api/v1/system/config`                       | ✅      | Frontend client limits and constraints                   |
+| `POST /api/v1/chat/sessions/{id}/documents`       | ✅      | Upload one document                                      |
+| `POST /api/v1/chat/sessions/{id}/documents/batch` | ✅      | Upload up to 10 files, rate-limited 10/hour/IP           |
+| `GET /api/v1/chat/sessions/{id}/documents`        | ✅      | List documents                                           |
+| `DELETE /api/v1/documents/{id}`                   | ✅      | Delete document + its vectors                            |
+| `POST /api/v1/documents/{id}/retry`               | ✅      | Retry ingestion of a failed document                     |
+| `POST /api/v1/chat/sessions`                      | ✅      | Create chat session                                      |
+| `GET /api/v1/chat/sessions`                       | ✅      | List sessions                                            |
+| `GET /api/v1/chat/sessions/{id}`                  | ✅      | Get single session                                       |
+| `DELETE /api/v1/chat/sessions/{id}`               | ✅      | Delete session + docs + vectors                          |
+| `GET /api/v1/chat/sessions/{id}/messages`         | ✅      | Session history                                          |
+| `POST /api/v1/chat/sessions/{id}/messages/stream` | ✅      | Ask question → SSE Stream (sources, token+, done, error) |
 
 All errors use the standard shape: `{"error": {"code", "message", "details?", "request_id?"}}`.
+
+**Response contract notes:**
+- `GET .../messages` returns `ChatMessageResponse` with `sources: list[SourceCitation] | None` — persisted citations survive page refresh.
+- `GET /api/v1/system/config` returns `max_question_length` (int) in addition to existing fields.
+- `DocumentResponse` includes `file_size_bytes: int | None` — populated for newly uploaded documents, `null` for legacy documents.
 
 ---
 
@@ -117,26 +136,28 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 
 1. **Deduplication:** identical content (SHA-256) is never stored twice, regardless of filename → `409 duplicate_document`. ✅ implemented
 2. **Rate limiting:** max 10 files per batch request; 10 upload requests/hour/IP. ✅ implemented
-3. **Upload → ingestion decoupling:** upload returns `201` immediately with `status=uploaded`; ingestion runs as a background task and flips status to `ready`/`failed`. ✅ implemented
+3. **Upload → ingestion decoupling:** upload returns `201` immediately with `status=uploaded`; ingestion runs in the ARQ worker queue and flips status to `ready`/`failed`. ✅ implemented
 4. **Client filenames are never filesystem paths.** Physical name = `<uuid><ext>`. ✅ implemented
 5. **Session isolation:** retrieval is scoped to all ready documents; chat history is scoped to its session only.
-6. **Memory budget:** prompt = system + summary + last N messages + retrieved chunks, trimmed to the model's context budget before sending.
+6. **Memory budget:** prompt = system + summary + last N messages + retrieved chunks, trimmed to the model's context budget before sending. (Summary logic: summarize ONLY messages in the slice `[summarized_message_count : total_count - MEMORY_SHORT_TERM_N]`, merge with previous summary, then set `summarized_message_count = total_count - MEMORY_SHORT_TERM_N`).
 
 ---
 
 ## 8. Error Cases (canonical)
 
-| Condition | HTTP | Code |
-|---|---|---|
-| Missing filename | 400 | `missing_filename` ✅ |
-| Unsupported type | 422 | `unsupported_document_type` ✅ |
-| File too large | 413 | `file_too_large` ✅ |
-| Duplicate content | 409 | `duplicate_document` ✅ |
-| Rate limit hit | 429 | `rate_limit_exceeded` ✅ |
-| Not found (doc/session) | 404 | `not_found` ✅ |
-| Storage failure | 500 | `storage_error` ✅ |
-| LLM provider failure | 502 | `llm_provider_error` ✅ |
-| Ingestion failure | document status → `failed` (no HTTP error to client) | ✅ |
+| Condition               | HTTP                                                 | Code                          |
+| ----------------------- | ---------------------------------------------------- | ----------------------------- |
+| Missing filename        | 400                                                  | `missing_filename` ✅          |
+| Unsupported type        | 422                                                  | `unsupported_document_type` ✅ |
+| File too large          | 413                                                  | `file_too_large` ✅            |
+| Duplicate content       | 409                                                  | `duplicate_document` ✅        |
+| Rate limit hit          | 429                                                  | `rate_limit_exceeded` ✅       |
+| Not found (doc/session) | 404                                                  | `not_found` ✅                 |
+| Storage failure         | 500                                                  | `storage_error` ✅             |
+| LLM provider failure    | 502                                                  | `llm_provider_error` ✅        |
+| Ingestion failure       | document status → `failed` (no HTTP error to client) | ✅                             |
+| Invalid state for retry | 409                                                  | `invalid_document_state` ✅    |
+| Ingestion stalled       | document status → `failed` (via watchdog cron)       | `stalled` ✅                   |
 
 ---
 
@@ -151,13 +172,18 @@ All errors use the standard shape: `{"error": {"code", "message", "details?", "r
 - Background ingestion pipeline (parsing, chunking, batched BGE-M3 embeddings, Qdrant hybrid vectors upsert)
 - Chat sessions, short-term and summary memory, hybrid retrieval fusion, and context-budget generation via Groq API
 - Document Management endpoints (list and complete deletion across DB, File, and Vector Store)
-
-**Not yet implemented** — see [progress/roadmap.md](progress/roadmap.md).
+- Model warm-up & readiness (BGE-M3 pre-loads at server boot via lifespan, `/healthz` and `/readyz` endpoints, UI blocks input until ready)
+- Correctness and performance optimizations (App-scoped singletons, lock-free deduplication, prefetch session filters in Qdrant, threadpool for parsing/chunking, CORS support)
+- SSE Streaming End-to-End (Streaming backend generation to Next.js client, eliminating rag-phase polling and HTTP timeouts)
+- ARQ Background Ingestion (Redis-backed ingestion queues, exponential backoff retries, dedicated worker processes, and automatic recovery sweep on boot).
+- Watchdog cron job that ensures documents never get stuck in `processing` indefinitely if a worker silently crashes.
 
 ---
 
 ## 10. Known Issues / Risks
 
-- BGE-M3 first load downloads ~2 GB and occupies ~2–3 GB RAM — lazy singleton implemented.
+- BGE-M3 first load downloads ~2 GB and occupies ~2–3 GB RAM — lazy singleton implemented and pre-loaded on boot in both API server and workers.
 - SQLite is fine at MVP scale; the session repository port exists so it can be swapped.
 - No auth — MVP is single-user local. Do not expose beyond localhost.
+- **Recovery Sweep Safety:** A restart mid-ingestion re-enqueues documents (status `UPLOADED` or `PROCESSING`) even if a job was mid-flight. This is entirely safe because Qdrant point IDs are deterministic (`uuid5(document_id, chunk_index)`), making all upserts idempotent.
+- **Resolved Risk:** The "stuck forever in processing" risk class has been entirely eliminated by a 1-minute `stalled_watchdog` cron job.

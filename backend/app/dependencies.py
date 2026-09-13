@@ -1,28 +1,33 @@
-from typing import Annotated
+from __future__ import annotations
 
-from fastapi import Depends
+from typing import Annotated, cast
+from uuid import UUID
+
+from arq.connections import ArqRedis
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .core import Settings, get_settings
+from .core.exceptions import NotFoundError, QueueUnavailableError
 from .infrastructure import (
-    DocumentStorage,
     FileStoragePort,
     LLMProviderPort,
-    QdrantVectorStore,
     SessionRepositoryPort,
     VectorStorePort,
 )
 from .infrastructure import get_db as _get_db
+from .infrastructure.ports import SessionData
 from .retrieval.service import RetrievalService
-from .services.chat_service import ChatService
+from .services import ChatService, DocumentService
 
-# -------- App-Settings --------
+# -------- App Settings --------
 type SettingsDep = Annotated[
     Settings,
     Depends(get_settings),
 ]
 
-# -------- DB --------
+
+# -------- Database --------
 type SessionDep = Annotated[
     AsyncSession,
     Depends(_get_db),
@@ -30,8 +35,12 @@ type SessionDep = Annotated[
 
 
 # -------- Storage --------
-def get_storage() -> FileStoragePort:
-    return DocumentStorage()
+def get_storage(request: Request) -> FileStoragePort:
+    """Return the application document-storage adapter."""
+    return cast(
+        FileStoragePort,
+        request.app.state.document_storage,
+    )
 
 
 type StorageDep = Annotated[
@@ -41,8 +50,12 @@ type StorageDep = Annotated[
 
 
 # -------- Vector Store --------
-def get_vector_store(settings: SettingsDep) -> VectorStorePort:
-    return QdrantVectorStore(settings)
+def get_vector_store(request: Request) -> VectorStorePort:
+    """Return the application vector-store adapter."""
+    return cast(
+        VectorStorePort,
+        request.app.state.vector_store,
+    )
 
 
 type VectorStoreDep = Annotated[
@@ -52,7 +65,10 @@ type VectorStoreDep = Annotated[
 
 
 # -------- Chat Sessions --------
-def get_session_repository(session: SessionDep) -> SessionRepositoryPort:
+def get_session_repository(
+    session: SessionDep,
+) -> SessionRepositoryPort:
+    """Build the session repository for the current database session."""
     from .infrastructure import SqliteSessionRepository
 
     return SqliteSessionRepository(session)
@@ -64,11 +80,39 @@ type SessionRepositoryDep = Annotated[
 ]
 
 
+async def get_session_or_404(
+    session_id: UUID,
+    repository: SessionRepositoryDep,
+) -> SessionData:
+    """Return a session or raise a not-found error."""
+    session = await repository.get_session(session_id)
+
+    if session is None:
+        raise NotFoundError(
+            message=f"Session {session_id} not found",
+        )
+
+    return session
+
+
+type ValidSessionDep = Annotated[
+    SessionData,
+    Depends(get_session_or_404),
+]
+
+
 # -------- LLM Provider --------
-def get_llm_provider(settings: SettingsDep) -> LLMProviderPort:
+def get_llm_provider(
+    request: Request,
+    settings: SettingsDep,
+) -> LLMProviderPort:
+    """Build the configured LLM provider adapter."""
     from .infrastructure import OpenAICompatibleLLM
 
-    return OpenAICompatibleLLM(settings)
+    return OpenAICompatibleLLM(
+        settings,
+        cast(object, request.app.state.http_client),  # type: ignore[arg-type]
+    )
 
 
 type LLMProviderDep = Annotated[
@@ -79,14 +123,62 @@ type LLMProviderDep = Annotated[
 
 # -------- Retrieval Service --------
 def get_retrieval_service(
-    vector_store: VectorStoreDep, settings: SettingsDep
+    vector_store: VectorStoreDep,
+    settings: SettingsDep,
 ) -> RetrievalService:
-    return RetrievalService(vector_store, settings)
+    """Build the retrieval service."""
+    return RetrievalService(
+        vector_store,
+        settings,
+    )
 
 
 type RetrievalServiceDep = Annotated[
     RetrievalService,
     Depends(get_retrieval_service),
+]
+
+
+# -------- ARQ Background Jobs --------
+def get_arq_pool(request: Request) -> ArqRedis:
+    """Return the ARQ pool or fail with a service-unavailable error."""
+    pool = getattr(
+        request.app.state,
+        "arq_pool",
+        None,
+    )
+
+    if pool is None:
+        raise QueueUnavailableError()
+
+    return cast(ArqRedis, pool)
+
+
+type ArqPoolDep = Annotated[
+    ArqRedis,
+    Depends(get_arq_pool),
+]
+
+
+# -------- Document Service --------
+def get_document_service(
+    session: SessionDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+    vector_store: VectorStoreDep,
+) -> DocumentService:
+    """Build the document service."""
+    return DocumentService(
+        session,
+        storage,
+        settings,
+        vector_store,
+    )
+
+
+type DocumentServiceDep = Annotated[
+    DocumentService,
+    Depends(get_document_service),
 ]
 
 
@@ -97,11 +189,31 @@ def get_chat_service(
     llm: LLMProviderDep,
     settings: SettingsDep,
 ) -> ChatService:
-
-    return ChatService(repository, retrieval_service, llm, settings)
+    """Build the chat service."""
+    return ChatService(
+        repository,
+        retrieval_service,
+        llm,
+        settings,
+    )
 
 
 type ChatServiceDep = Annotated[
     ChatService,
     Depends(get_chat_service),
+]
+
+
+__all__ = [
+    "ArqPoolDep",
+    "ChatServiceDep",
+    "DocumentServiceDep",
+    "LLMProviderDep",
+    "RetrievalServiceDep",
+    "SessionDep",
+    "SessionRepositoryDep",
+    "SettingsDep",
+    "StorageDep",
+    "ValidSessionDep",
+    "VectorStoreDep",
 ]

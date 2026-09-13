@@ -1,112 +1,201 @@
-from typing import Annotated, Any
-from uuid import UUID
+from __future__ import annotations
+
+import json
+from collections.abc import AsyncGenerator
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     File,
+    Query,
     Request,
-    Response,
     UploadFile,
     status,
 )
-from pydantic import BaseModel
-from sqlalchemy import select
+from fastapi.responses import StreamingResponse
 
-from ...core import limiter
+from ...core import get_settings, limiter
 from ...core.exceptions import AppError, TooManyFilesError
 from ...dependencies import (
+    ArqPoolDep,
     ChatServiceDep,
-    SessionDep,
+    DocumentServiceDep,
     SessionRepositoryDep,
     SettingsDep,
-    StorageDep,
-    VectorStoreDep,
+    ValidSessionDep,
 )
-from ...models import ChatSession, Document
+from ...models import Document
 from ...schemas import (
     BatchUploadError,
     BatchUploadResponse,
     BatchUploadResult,
-    DocumentResponse,
-)
-from ...schemas.chat import (
+    ChatAnswer,
     ChatMessageListResponse,
+    ChatMessageResponse,
+    ChatRequest,
     ChatSessionListResponse,
     ChatSessionResponse,
+    DocumentResponse,
 )
-from ...services import DocumentService
-from ...services.chat_service import ChatAnswer
-from .documents import run_ingestion_background
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(
+    prefix="/chat",
+    tags=["chat"],
+)
 
 
 @router.post(
-    "/sessions", response_model=ChatSessionResponse, status_code=status.HTTP_201_CREATED
+    "/sessions",
+    response_model=ChatSessionResponse,
+    status_code=status.HTTP_201_CREATED,
 )
-async def create_session(repository: SessionRepositoryDep) -> Any:
+async def create_session(
+    repository: SessionRepositoryDep,
+) -> ChatSessionResponse:
+    """Create a new chat session."""
     session_id = await repository.create_session()
     session = await repository.get_session(session_id)
-    return session
+
+    if session is None:
+        raise RuntimeError(
+            "Created chat session could not be loaded.",
+        )
+
+    return ChatSessionResponse.model_validate(session)
 
 
-@router.get("/sessions", response_model=ChatSessionListResponse)
-async def list_sessions(repository: SessionRepositoryDep) -> Any:
-    sessions = await repository.list_sessions()
-    return {"sessions": sessions}
-
-
-@router.get("/sessions/{session_id}/messages", response_model=ChatMessageListResponse)
-async def list_messages(session_id: UUID, repository: SessionRepositoryDep) -> Any:
-    # Verify session exists
-    session = await repository.get_session(session_id)
-    if not session:
-        from ...core.exceptions import NotFoundError
-
-        raise NotFoundError(message=f"Session {session_id} not found")
-
-    messages = await repository.list_messages(session_id)
-    return {"messages": messages}
-
-
-@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_session(
-    session_id: UUID,
+@router.get(
+    "/sessions",
+    response_model=ChatSessionListResponse,
+)
+async def list_sessions(
     repository: SessionRepositoryDep,
-    db: SessionDep,
-    storage: StorageDep,
-    vector_store: VectorStoreDep,
-    settings: SettingsDep,
-) -> Response:
-    from ...services import DocumentService
+) -> ChatSessionListResponse:
+    """List chat sessions."""
+    sessions = await repository.list_sessions()
 
-    # Verify session exists
-    session = await repository.get_session(session_id)
-    if not session:
-        from ...core.exceptions import NotFoundError
-
-        raise NotFoundError(message=f"Session {session_id} not found")
-
-    doc_service = DocumentService(db, storage, settings, vector_store)
-    await doc_service.delete_session_data(session_id)
-
-    await repository.delete_session(session_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return ChatSessionListResponse(
+        sessions=[ChatSessionResponse.model_validate(session) for session in sessions],
+    )
 
 
-class ChatRequest(BaseModel):
-    question: str
+@router.get(
+    "/sessions/{session_id}",
+    response_model=ChatSessionResponse,
+)
+async def get_session(
+    session: ValidSessionDep,
+) -> ChatSessionResponse:
+    """Return a chat session."""
+    return ChatSessionResponse.model_validate(session)
 
 
-@router.post("/sessions/{session_id}/messages", response_model=ChatAnswer)
-async def ask_question(
-    session_id: UUID,
-    request: ChatRequest,
+@router.get(
+    "/sessions/{session_id}/messages",
+    response_model=ChatMessageListResponse,
+)
+async def list_messages(
+    session: ValidSessionDep,
+    repository: SessionRepositoryDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ChatMessageListResponse:
+    """List messages for a chat session."""
+    messages = await repository.get_messages(
+        session["id"],
+        offset=offset,
+        limit=limit,
+    )
+
+    return ChatMessageListResponse(
+        messages=[
+            ChatMessageResponse.model_validate(message, from_attributes=True)
+            for message in messages
+        ],
+    )
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_session(
+    session: ValidSessionDep,
+    repository: SessionRepositoryDep,
+    doc_service: DocumentServiceDep,
+    force: bool = False,
+) -> None:
+    """Delete a session and all associated documents."""
+    await doc_service.delete_session_data(
+        session["id"],
+        force=force,
+    )
+
+    await repository.delete_session(
+        session["id"],
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/messages/stream",
+    response_class=StreamingResponse,
+)
+@limiter.limit(lambda: get_settings().CHAT_RATE_LIMIT)
+async def ask_question_stream(
+    request: Request,
+    session: ValidSessionDep,
+    payload: ChatRequest,
     chat_service: ChatServiceDep,
     background_tasks: BackgroundTasks,
-) -> Any:
-    return await chat_service.answer(session_id, request.question, background_tasks)
+) -> StreamingResponse:
+    """Stream an assistant response using server-sent events."""
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        async for event in chat_service.answer_stream(
+            session["id"],
+            session,
+            payload.question,
+            background_tasks,
+        ):
+            if event["event"] == "ping":
+                yield ": ping\n\n"
+                continue
+
+            yield (
+                f"event: {event['event']}\n"
+                f"data: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
+            )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/messages",
+    response_model=ChatAnswer,
+)
+@limiter.limit(lambda: get_settings().CHAT_RATE_LIMIT)
+async def ask_question(
+    request: Request,
+    session: ValidSessionDep,
+    payload: ChatRequest,
+    chat_service: ChatServiceDep,
+    background_tasks: BackgroundTasks,
+) -> ChatAnswer:
+    """Generate a complete assistant response."""
+    return await chat_service.answer(
+        session["id"],
+        session,
+        payload.question,
+        background_tasks,
+    )
 
 
 @router.post(
@@ -115,27 +204,25 @@ async def ask_question(
     status_code=status.HTTP_201_CREATED,
     summary="Upload a new document",
 )
-@limiter.limit("10/hour")
+@limiter.limit(lambda: get_settings().UPLOAD_RATE_LIMIT)
 async def upload_document(
-    session_id: UUID,
-    background_tasks: BackgroundTasks,
     request: Request,
+    session: ValidSessionDep,
     file: UploadFile,
-    db: SessionDep,
-    storage: StorageDep,
-    settings: SettingsDep,
+    doc_service: DocumentServiceDep,
+    arq_pool: ArqPoolDep,
 ) -> DocumentResponse:
-    """Upload a single document to the RAG system."""
-    session_check = await db.execute(
-        select(ChatSession).where(ChatSession.id == session_id)
+    """Upload and queue a document for background ingestion."""
+    document = await doc_service.upload_document(
+        file,
+        session["id"],
     )
-    if not session_check.scalar_one_or_none():
-        from ...core.exceptions import NotFoundError
 
-        raise NotFoundError(message=f"Session {session_id} not found")
-    service = DocumentService(db, storage, settings)
-    document = await service.upload_document(file, session_id)
-    background_tasks.add_task(run_ingestion_background, document.id)
+    await arq_pool.enqueue_job(
+        "ingest_document",
+        str(document.id),
+    )
+
     return DocumentResponse.model_validate(document)
 
 
@@ -143,68 +230,73 @@ async def upload_document(
     "/sessions/{session_id}/documents/batch",
     response_model=BatchUploadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload up to 10 documents in one request",
+    summary="Upload multiple documents",
 )
-@limiter.limit("10/hour")
+@limiter.limit(lambda: get_settings().UPLOAD_RATE_LIMIT)
 async def upload_batch(
-    session_id: UUID,
-    background_tasks: BackgroundTasks,
     request: Request,
+    session: ValidSessionDep,
     files: Annotated[list[UploadFile], File(...)],
-    db: SessionDep,
-    storage: StorageDep,
+    doc_service: DocumentServiceDep,
     settings: SettingsDep,
+    arq_pool: ArqPoolDep,
 ) -> BatchUploadResponse:
-    """Upload multiple documents (up to 10) in a single multipart request.
-
-    Returns one result entry per file; a per-file error never fails the batch.
-    """
+    """Upload multiple documents and queue successful uploads."""
     if len(files) > settings.MAX_FILES_PER_REQUEST:
         raise TooManyFilesError(
             message=(
-                f"Too many files. Maximum {settings.MAX_FILES_PER_REQUEST} "
-                "files per request."
-            )
+                f"Too many files. Maximum "
+                f"{settings.MAX_FILES_PER_REQUEST} files per request."
+            ),
         )
 
-    session_check = await db.execute(
-        select(ChatSession).where(ChatSession.id == session_id)
-    )
-    if not session_check.scalar_one_or_none():
-        from ...core.exceptions import NotFoundError
-
-        raise NotFoundError(message=f"Session {session_id} not found")
-    service = DocumentService(db, storage, settings)
-    raw_results: list[Document | BaseException] = await service.upload_batch(
-        files, session_id
+    raw_results = await doc_service.upload_batch(
+        files,
+        session["id"],
     )
 
     results: list[BatchUploadResult] = []
-    for file, outcome in zip(files, raw_results, strict=True):
+
+    for file, outcome in zip(
+        files,
+        raw_results,
+        strict=True,
+    ):
         filename = file.filename or ""
+
         if isinstance(outcome, Document):
-            background_tasks.add_task(run_ingestion_background, outcome.id)
+            await arq_pool.enqueue_job(
+                "ingest_document",
+                str(outcome.id),
+            )
+
             results.append(
                 BatchUploadResult(
                     filename=filename,
                     ok=True,
                     document=DocumentResponse.model_validate(outcome),
-                )
+                ),
+            )
+            continue
+
+        if isinstance(outcome, AppError):
+            error = BatchUploadError(
+                code=outcome.code,
+                message=outcome.message,
             )
         else:
-            # Map AppError subclasses to their defined code/message; fall back
-            # to a generic internal error for anything unexpected.
-            if isinstance(outcome, AppError):
-                error = BatchUploadError(
-                    code=outcome.code,
-                    message=outcome.message,
-                )
-            else:
-                error = BatchUploadError(
-                    code="internal_error",
-                    message="An unexpected error occurred while processing this file.",
-                )
-            results.append(BatchUploadResult(filename=filename, ok=False, error=error))
+            error = BatchUploadError(
+                code="internal_error",
+                message=("An unexpected error occurred while processing this file."),
+            )
+
+        results.append(
+            BatchUploadResult(
+                filename=filename,
+                ok=False,
+                error=error,
+            ),
+        )
 
     return BatchUploadResponse(results=results)
 
@@ -215,21 +307,16 @@ async def upload_batch(
     summary="List documents",
 )
 async def list_documents(
-    session_id: UUID,
-    db: SessionDep,
-    storage: StorageDep,
-    settings: SettingsDep,
-    limit: int = 50,
-    offset: int = 0,
+    session: ValidSessionDep,
+    doc_service: DocumentServiceDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentResponse]:
-    """List all documents, newest first."""
-    session_check = await db.execute(
-        select(ChatSession).where(ChatSession.id == session_id)
+    """List documents belonging to a session."""
+    documents = await doc_service.list_documents(
+        session["id"],
+        limit=limit,
+        offset=offset,
     )
-    if not session_check.scalar_one_or_none():
-        from ...core.exceptions import NotFoundError
 
-        raise NotFoundError(message=f"Session {session_id} not found")
-    service = DocumentService(db, storage, settings)
-    docs = await service.list_documents(session_id, limit=limit, offset=offset)
-    return [DocumentResponse.model_validate(d) for d in docs]
+    return [DocumentResponse.model_validate(document) for document in documents]

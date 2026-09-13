@@ -6,260 +6,213 @@ Read it **before every session**. Follow it **without exception**.
 > Reading order for any agent starting work:
 > 1. This file (`AGENTS.md`)
 > 2. [Software Design Document](docs/sdd.md) — the Single Source of Truth (SST)
-> 3. [Roadmap](docs/progress/roadmap.md) — to find the current stage
-> 4. The current stage file in `docs/progress/` — the active scope
-> 5. [Diagrams](docs/diagrams/) — when touching architecture or data flow
+> 3. [Diagrams](docs/diagrams/) — when touching architecture or data flow
 
 ---
 
-## 1. Engineering Principles
+## 1. Engineering Principles & Clean Architecture
 
-- **DRY** — one source of truth; eliminate duplication at every level.
-- **YAGNI** — do not implement what the current stage does not require.
-- **KISS** — prefer the simplest implementation that is correct and understandable.
-- **Readability** — a developer reading this for the first time must understand it quickly.
-- **Maintainability** — changes in one layer must not silently break others.
-- **Separation of concerns** — routing, business logic, persistence, and infrastructure are separate.
-- **Explicit responsibility boundaries** — each module/class has one clear job; document it.
-- **Security by default** — never trust client input for filesystem paths, IDs, or size limits.
-- **Least privilege** — expose the minimum interface required; hide internals.
-- **Fail clearly** — raise specific, named exceptions at layer boundaries; do not swallow errors.
-- **Simple over speculative** — do not introduce abstractions for hypothetical future requirements.
+- **Clean Architecture** — The system is strictly divided into layers. Dependencies only point inward.
+- **SOLID Principles** — Classes and functions must have single responsibilities, be open for extension but closed for modification, and depend on abstractions (Ports), not concretions (Adapters).
+- **DRY & YAGNI** — One source of truth; eliminate duplication. Do not implement what is not required today.
+- **KISS** — Prefer the simplest implementation that is correct and understandable.
+- **Readability & Maintainability** — A developer reading this for the first time must understand it quickly. Changes in one layer must not silently break others.
+- **Separation of Concerns** — Routing, business logic, persistence, and infrastructure are completely decoupled.
+- **Fail Clearly** — Raise specific, named exceptions at layer boundaries. Do not swallow errors.
 
-**Language rule:** all code, comments, docstrings, commits, and documentation are written in **English only**.
+**Language Rule:** All code, comments, docstrings, commits, and documentation are written in **English only**.
 
 ---
 
-## 2. Project Scope & Hardware Constraints
+## 2. Project Scope & Architecture
 
-A **RAG (Retrieval-Augmented Generation) system**: multi-file, multi-format document
-ingestion (upload → parse → chunk → embed → store), hybrid retrieval, LLM-based
-question answering with chat sessions and memory.
+A production-grade **RAG (Retrieval-Augmented Generation) system**:
+- **Backend:** Document ingestion (upload → parse → chunk → embed → store), hybrid retrieval, LLM-based question answering, async task queues for processing, chat sessions, and memory.
+- **Frontend:** A responsive Next.js application with intentional UX, streaming chat responses, dynamic upload tracking, and chat history.
 
-**Development hardware (hard constraint):**
-- 2 GB VRAM → **no usable GPU inference**
-- 16 GB system RAM, CPU-only in practice
-
-**Consequences:**
-- No local LLM servers (Ollama, vLLM, llama.cpp, …). Generation is an **external LLM API** behind a port/adapter.
-- Embeddings run locally on CPU with a model that fits comfortably in RAM (see stack table).
-- Every library choice must justify its RAM/CPU footprint. Anything expecting a GPU is wrong for this project.
+**Development Hardware Constraints:**
+- Limited VRAM (CPU inference focus). Embeddings (`BAAI/bge-m3`) run locally on CPU.
+- LLM generation relies on an **external API** (OpenAI-compatible) behind a port/adapter, never a local GPU-heavy server.
 
 ---
 
-## 3. Tech Stack (fixed — do not substitute without a stage instruction)
+## 3. Tech Stack
 
-| Concern | Use | Do NOT use |
-|---|---|---|
-| Backend framework | FastAPI (current official patterns) | Flask, Django |
-| ORM / migrations | SQLAlchemy 2.x async + Alembic | raw SQL, `create_all` in prod |
-| Metadata & chat sessions DB | SQLite (`sqlite+aiosqlite`) | PostgreSQL (until an explicit stage) |
-| Parsing | `pypdf` (PDF), plain read (TXT), `markdown-it-py` (MD), `python-docx` (DOCX) | heavyweight ETL frameworks |
-| Chunking | `langchain-text-splitters` (`RecursiveCharacterTextSplitter`, token-aware) — **standalone package only** | full LangChain framework |
-| Embeddings | `sentence-transformers`, model `BAAI/bge-m3` (CPU, dense + sparse, ~2–3 GB RAM, loaded once as a singleton) | any model that doesn't fit ~4 GB RAM |
-| Vector store | **Qdrant** via `qdrant-client`; hybrid (dense+sparse) fusion through Qdrant's native **Query API** | ChromaDB, FAISS, Pinecone, hand-rolled fusion in Python |
-| Reranking | `BAAI/bge-reranker-v2-m3` (CPU) — **deferred**, only when a stage introduces it | — |
-| LLM generation | External OpenAI-compatible API (provider chosen in the generation stage) behind `LLMProviderPort` | any local inference |
-| Rate limiting | `slowapi` (IP-based) + request-level validation | custom middleware reinventing it |
-| Agentic behavior | **Deferred**: LangGraph only, only if a stage explicitly requires multi-step reasoning | full LangChain agents |
-| Frontend | Next.js (App Router) + **pnpm** + TailwindCSS + shadcn/ui; base template from 21st.dev (`ai-chat`), stripped to what we need | create-react-app, Vue |
-| Package manager (backend) | `uv` | pip + requirements.txt |
+| Layer                      | Technology                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Backend Framework**      | FastAPI (async routing) + `uv` package manager                                                          |
+| **ORM / Database**         | SQLAlchemy 2.x async + Alembic + SQLite (for metadata & sessions)                                       |
+| **Task Queue**             | ARQ (Redis-based) for async background tasks (e.g., document chunking & embedding)                      |
+| **Parsing & Chunking**     | `pypdf`, `markdown-it-py`, `python-docx` + Langchain `RecursiveCharacterTextSplitter` (standalone only) |
+| **Embeddings & Vector**    | `sentence-transformers` (`BAAI/bge-m3` for CPU dense+sparse), **Qdrant** via `qdrant-client`            |
+| **Frontend Framework**     | Next.js (App Router), React 19, TypeScript                                                              |
+| **Frontend Styling/State** | Tailwind CSS v4, shadcn/ui, Zustand (state management), Lucide React (icons)                            |
+| **Rate Limiting**          | `slowapi` (IP-based) + request-level validation                                                         |
+| **Infrastructure**         | Docker & Docker Compose (Qdrant & Redis containers)                                                     |
 
-**Note on "strong tools per stage":** we use the best *focused* library for each
-pipeline stage (e.g. `langchain-text-splitters` for chunking, `sentence-transformers`
-for embeddings, `qdrant-client` Query API for hybrid retrieval). We deliberately do
-**not** adopt a monolithic RAG framework — the pipeline stages are our own thin,
-explicit modules that wrap these libraries. This gives strong per-stage quality
-without framework lock-in or hidden behavior.
+- `package.json`, `pyproject.toml`, and lockfiles are the authoritative source for installed package versions.
+- Do not assume versions from this document when they differ from the repository.
+
+*(Note: Do not substitute these core technologies without explicit user permission. E.g., No Prisma, no Django, no full LangChain agent framework).*
 
 ---
 
-## 4. Architecture Layers
+## 4. Architecture Layers (Backend)
 
-```
+```text
 Client (Next.js)
     ↓ HTTP
-app/apis/            — HTTP routing layer (thin)
-app/schemas/         — request/response contracts (Pydantic)
-app/services/        — use-case orchestration (business logic)
-app/parsers/         — file → ParsedSegment
+app/apis/            — HTTP routing layer (thin, maps req/res)
+app/schemas/         — Request/response contracts (Pydantic)
+app/services/        — Use-case orchestration (business logic)
+app/parsers/         — File → ParsedSegment
 app/chunking/        — ParsedSegment → Chunk
-app/embeddings/      — text → dense+sparse vectors (local, in-process)
-app/retrieval/       — query → ranked chunks
-app/generation/      — prompt building + response parsing
-app/memory/          — short-term + long-term chat memory logic
-app/models/          — ORM tables + shared domain value objects
-app/infrastructure/  — adapters for external systems (ports & adapters)
-    ↓
-SQLite / filesystem / Qdrant / external LLM API
+app/embeddings/      — Text → dense+sparse vectors
+app/retrieval/       — Query → ranked chunks
+app/generation/      — Prompt building + response parsing
+app/memory/          — Chat memory logic
+app/models/          — ORM tables + domain value objects
+app/infrastructure/  — Adapters for external systems (ports & adapters)
 ```
 
-**Classification rule:** a package that makes a network call to a separate running
-system (Qdrant server, LLM API) belongs in `infrastructure/`. A package that
-transforms data in-process using a local library/model gets its own top-level package.
-
-See [docs/diagrams/architecture.md](docs/diagrams/architecture.md) for the full diagram.
+**Classification Rule:** Any package making a network call to a separate system (Qdrant, Redis, LLM API) belongs in `infrastructure/`. Data transformations happen in top-level domain packages.
 
 ---
 
-## 5. Ports & Adapters Rule (swappability)
+## 5. Ports & Adapters (Swappability)
 
-Every external system is accessed through a **Port** (a `typing.Protocol`) with at
-least one **Adapter**. Services depend on ports, never on concrete adapters.
+Every external system is accessed through a **Port** (`typing.Protocol`) with at least one **Adapter**.
+Services **must** depend on ports, never on concrete adapters.
 
-| Port | Current adapter | Swap target (future) |
-|---|---|---|
-| `FileStoragePort` | `LocalDocumentStorage` (filesystem) | S3 / MinIO |
-| `VectorStorePort` | `QdrantVectorStore` | another vector DB |
-| `LLMProviderPort` | `OpenAICompatibleLLM` (httpx) | any provider |
-| `SessionRepositoryPort` | `SqliteSessionRepository` | PostgreSQL repository |
-
-- Ports live in `app/infrastructure/ports.py`.
-- Adapters live in `app/infrastructure/<system>/`.
-- **Factory selection** happens in `app/dependencies.py` (one `get_*` provider per port), driven by `Settings`.
-- Swapping an adapter must touch **only** the adapter + factory. No service changes.
-
-See [docs/diagrams/component-design.md](docs/diagrams/component-design.md).
+- **Ports** live in `app/infrastructure/ports.py`.
+- **Adapters** live in `app/infrastructure/<system>/` (e.g., `vector_store`, `llm_provider`).
+- **Factories** in `app/dependencies.py` inject the right adapter.
+- Services must depend on stable ports, not concrete external adapters.
+- Adapter-specific implementation details must not leak into services.
+- Replacing an adapter should normally require changes only to the adapter, its configuration, and dependency wiring. Changes outside these areas require an explicit architectural reason.
 
 ---
 
-## 6. Layer Responsibilities
+## 6. Frontend Engineering, UX & Performance
 
-### `app/apis/`
-Map HTTP requests to service calls; map results to HTTP responses.
-No business logic, no SQL, no filesystem, no duplicate detection.
-
-### `app/schemas/`
-Pydantic models for API I/O only. Imports from `core/` only.
-
-### `app/services/`
-Orchestrate pipeline packages and persistence into use-cases:
-`DocumentService` (upload lifecycle), `IngestionService` (parse → chunk → embed → store,
-one pipeline call, no duplicate compute), `RetrievalService` (query → ranked chunks),
-`ChatService` (retrieval + memory + generation). No parsing/chunking/embedding logic
-itself; no FastAPI objects; no direct Qdrant/LLM calls — go through ports.
-
-### `app/parsers/` · `app/chunking/` · `app/embeddings/`
-In-process transformations. One responsibility each. Import from `models/`, `core/` only.
-
-### `app/retrieval/`
-Query embedding → vector-store port call → optional rerank. No prompt building, no LLM calls.
-
-### `app/generation/`
-Prompt templates, context assembly, response parsing. The LLM API call itself lives in `infrastructure/llm_provider/`.
-
-### `app/memory/`
-Short-term window loading, rolling summary updates, token-budget trimming.
-Persistence goes through `SessionRepositoryPort`.
-
-### `app/models/`
-SQLAlchemy ORM tables + shared domain value objects (`ParsedSegment`, `Chunk`, `RetrievalResult`, `ChatMessage`). No business logic.
-
-### `app/infrastructure/`
-Adapters only: `file_storage/`, `vector_store/`, `llm_provider/`, `db/`, `session_store/`. No business rules.
-
-### `app/core/`
-Config, enums, exceptions, logging. Imports nothing from other app layers.
-
-### `app/dependencies.py`
-FastAPI dependency providers + **adapter factories**: `get_settings`, `get_db`,
-`get_storage`, `get_vector_store`, `get_llm_provider`, `get_session_repository`.
+* **Framework:** Use Next.js App Router, React Server Components, and Client Components intentionally.
+* **Server/Client Boundary:** Prefer Server Components by default. Use `'use client'` only when browser APIs, local interaction, or client-side state is required.
+* **State:** Use Zustand only for shared client state that must persist across components/routes. Keep component-specific state local with React state/hooks.
+* **Styling:** Use Tailwind CSS v4 and existing `shadcn/ui` components. Do not introduce another styling system or UI library without explicit approval.
+* **Components:** Keep components small and focused. Reuse existing components before creating new ones. Avoid premature abstractions.
+* **Data Fetching:** Follow the existing repository data-fetching pattern. Do not introduce a new fetching library or architecture without explicit approval.
+* **Loading UX:** Every async user-facing operation must have an intentional loading state. Prefer skeletons/placeholders where appropriate; avoid unnecessary full-page loading states.
+* **Error UX:** User-facing failures must have clear recovery states. Never expose raw exceptions, stack traces, or internal implementation details.
+* **Empty States:** Pages and major UI sections must handle empty, loading, success, and error states explicitly.
+* **Navigation:** Client-side navigation should remain responsive. Do not introduce unnecessary client-side work, blocking requests, or repeated data fetching during route transitions.
+* **Performance:** Avoid unnecessary re-renders, large client bundles, duplicated requests, and converting Server Components to Client Components without a concrete reason.
+* **Accessibility:** Interactive elements must remain keyboard accessible, have appropriate labels, focus states, and semantic HTML. Do not rely on color alone to communicate state.
+* **Responsive Design:** UI must work across mobile, tablet, and desktop without breaking layout or interaction.
+* **Consistency:** Follow existing design tokens, spacing, typography, interaction patterns, and component conventions before creating new patterns.
+* **Visual Changes:** Do not redesign unrelated UI while implementing a feature or bug fix.
+* **No Unnecessary Dependencies:** Do not add packages when the existing stack can solve the requirement cleanly.
+* **No Speculation:** Do not invent frontend behavior, APIs, routes, response shapes, or UX requirements. Derive them from the codebase, SDD, API contracts, and task requirements.
 
 ---
 
-## 7. API Rules
+## 7. API & Database Rules
 
-- Routers are thin: validate inputs → call services → return responses.
-- Never query the DB or touch the filesystem from a router.
-- Use `UploadFile` + `multipart/form-data` for uploads; `Annotated[list[UploadFile], File(...)]` for multi-file.
-- **Multi-file upload must not degrade performance:** process files with bounded concurrency (async semaphore), stream to disk, never buffer whole files in memory.
-- Use `BackgroundTasks` for post-response ingestion in the MVP.
-- Consistent error shape: `{"error": {"code", "message", "details?", "request_id?"}}` (already implemented in `apis/exception_handlers.py` — keep it the single error path).
+- Routers are strictly for validation and HTTP mapping. **Never query the DB or touch the filesystem from a router.**
+- **Database:** SQLAlchemy 2.x `AsyncSession` everywhere. One session per request. DB constraints (e.g., `content_hash UNIQUE`) are part of correctness.
+- **Uploads:** Multi-file uploads must stream to disk and process concurrently via background tasks (ARQ/Redis) to prevent memory bloat and request timeouts.
+- **Error Handling:** Standardized error shape: `{"error": {"code", "message", "details?"}}`. Do not leak internal stack traces to the client.
 
 ---
 
-## 8. Database Rules
+## 8. Verification & QA
 
-- SQLAlchemy 2.x `AsyncSession` everywhere; one session per request/background task.
-- All schema changes via **Alembic** migrations; review auto-generated migrations before applying.
-- DB constraints are part of correctness: `documents.content_hash UNIQUE` must hold at the DB level.
-- Sessions feature stores **chat sessions and messages in SQLite** behind `SessionRepositoryPort` so it can be swapped later without service changes.
+Never claim a task is complete without verifying the actual change.
 
----
+### Required Verification
 
-## 9. File Handling & Deduplication Rules
+Run the smallest relevant verification set first, then the full project checks when practical.
 
-- **Never** use client-supplied filenames as filesystem paths. Physical filename is always `<document_id><ext>`.
-- **Content-hash deduplication (already implemented):** SHA-256 of file content is computed while streaming; identical content under a different filename is rejected with `409 duplicate_document`. Do not weaken this.
-- Stream large files; never load fully into memory.
-- Wrap `OSError` at the infrastructure boundary — callers see `StorageError` only.
-
----
-
-## 10. Rate Limiting Rules
-
-- Upload endpoint: **max 10 files per request** (request validation) and **10 uploads/hour per IP** (`slowapi`).
-- File size limit enforced while streaming (existing `MAX_FILE_SIZE_MB`).
-- Rate-limit errors return `429` with the standard error shape.
-
----
-
-## 11. Memory Rules (chat)
-
-- **Short-term:** last N messages of the session (N from `Settings`), loaded via `SessionRepositoryPort`, trimmed to a token budget before prompt assembly.
-- **Long-term:** a rolling per-session summary, updated every K turns, stored in SQLite.
-- **Semantic memory (deferred):** embedding past Q&A into a dedicated Qdrant collection — only when a stage introduces it.
-- Memory logic lives in `app/memory/`; persistence behind the session port. No direct SQL from `app/memory/`.
-
----
-
-## 12. Testing Policy (current)
-
-**Automated tests are deferred** to a later dedicated stage (token economy decision).
-Until then:
-- Each stage file lists **manual verification steps** — execute them and record the output.
-- When the tests stage starts: `httpx.AsyncClient` + `ASGITransport`, `app.dependency_overrides` (no monkeypatching), isolated in-memory SQLite, `tmp_path` storage, Qdrant `:memory:`.
-
----
-
-## 13. Workflow
-
-```
-Read stage file → Confirm scope → Implement → Manual verify → Lint →
-Write stage summary → Update roadmap checkboxes → STOP → wait for next stage
-```
-
-- **Never** work outside the current stage's *Scope (In)*. If something out of scope seems necessary, **flag it — don't do it**.
-- **Never** continue automatically to the next stage.
-- After finishing a stage, the agent **must**:
-  1. Write `docs/progress/stage-XX-summary.md` from [the summary template](docs/progress/_stage-summary-template.md).
-  2. Tick the checkboxes in [docs/progress/roadmap.md](docs/progress/roadmap.md).
-- Before implementing, the agent summarizes its understanding in 3–5 bullet points and asks about anything ambiguous.
-
----
-
-## 14. Verification Commands
+**Backend**
 
 ```bash
+cd backend
 uv run ruff check .
 uv run ruff format --check .
-uv run alembic check        # when the DB schema changed
-uv run uvicorn app.main:app --reload   # smoke run
+uv run mypy app/
+uv run pytest
 ```
 
-Do not claim success without actual command output.
+**Frontend**
+
+```bash
+cd frontend
+pnpm lint
+pnpm build
+```
+
+### Runtime Verification
+
+When a change affects runtime behavior, also perform an appropriate smoke test.
+
+Do not treat starting a development server as proof of correctness. Prefer a deterministic check such as:
+
+* API health/request verification
+* targeted integration test
+* targeted frontend build/type check
+* browser verification for user-facing behavior
+
+### Verification Rules
+
+* Verify the behavior that was actually changed, not only unrelated checks.
+* Prefer targeted tests before broad verification.
+* Do not skip failing checks silently.
+* If a check cannot be run, state exactly why.
+* Never claim a test passed unless it actually passed.
+* Never assume an existing implementation is correct without inspecting the relevant code.
+* When fixing a bug, verify both the original failure and the corrected behavior when practical.
+* When changing contracts, APIs, schemas, or data flow, verify all affected consumers.
+* Check for unintended changes with:
+
+```bash
+git status
+git diff
+```
+
+### Failure Handling
+
+If verification fails:
+
+1. Read the actual error.
+2. Identify the root cause.
+3. Fix the smallest correct scope.
+4. Re-run the failing verification.
+5. Re-run broader checks if the change affects additional areas.
+
+Do not apply speculative fixes, suppress errors, weaken tests, or modify unrelated code merely to make verification pass.
+
+**Completion Rule:** A task is complete only when the implementation satisfies the requested scope and the relevant verification has passed or any unavoidable limitation has been explicitly reported.
+
 
 ---
 
-## 15. MVP Boundaries
+## 9. Agent Operating Rules
 
-**In scope now:** parsing, chunking, embeddings (BGE-M3), Qdrant storage, dense
-retrieval (hybrid as a toggle), single-pass generation, chat sessions in SQLite,
-short-term + summary memory, upload rate limiting, multi-file upload.
-
-**Out of scope until an explicit stage instruction:**
-- Authentication / multi-user
-- PostgreSQL / cloud storage / Redis / Celery
-- Reranking, semantic long-term memory, streaming responses
-- Agentic multi-step reasoning (LangGraph)
-- Automated test suite (deferred stage)
+- Read `AGENTS.md` before making changes.
+- Read `docs/sdd.md` before changing architecture, APIs, persistence, or data flow.
+- Inspect the existing implementation before proposing or changing it.
+- Treat the repository as the source of truth for current behavior.
+- Do not invent files, APIs, models, routes, dependencies, configuration, or requirements.
+- Do not assume a library is installed; verify it from `pyproject.toml`, `package.json`, lockfiles, or the actual codebase.
+- Do not assume an API contract; inspect the backend schema/route and its frontend consumer.
+- Do not replace an existing pattern with a new pattern unless the task requires it.
+- Prefer the smallest correct change that satisfies the requirement.
+- Do not refactor unrelated code.
+- Do not add dependencies without a concrete requirement.
+- Do not change architecture or core technologies without explicit approval.
+- Before modifying a file, understand how it is used by the rest of the system.
+- Before removing code, verify that it is unused.
+- When uncertain, inspect the repository or documentation instead of guessing.
+- Keep assumptions explicit and minimal.
+- After implementation, review the diff for unintended changes.
+- Never claim completion without verification.
+- Before making architectural or cross-layer changes, state the affected layers and verify the relevant contracts.

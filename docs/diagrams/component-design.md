@@ -19,10 +19,10 @@ flowchart LR
     end
 
     subgraph Ports["app/infrastructure/ports.py — typing.Protocol"]
-        FSP[FileStoragePort<br/>save · read · delete · move_from]
+        FSP[FileStoragePort<br/>read · delete · move_from]
         VSP[VectorStorePort<br/>ensure_collection · upsert_chunks<br/>query · delete_by_document]
         LLP[LLMProviderPort<br/>generate messages → answer]
-        SRP[SessionRepositoryPort<br/>create/get/list sessions<br/>add/list messages · update summary]
+        SRP[SessionRepositoryPort<br/>create/get/list sessions<br/>add/get messages · update summary]
     end
 
     subgraph Adapters["app/infrastructure — concrete adapters"]
@@ -74,7 +74,7 @@ flowchart LR
   native Query API — **never** reimplemented in Python.
 - **Backend ↔ LLM:** `httpx.AsyncClient` against an OpenAI-compatible
   `/chat/completions` endpoint; API key from `Settings`, never in code.
-- **Background work:** FastAPI `BackgroundTasks` for ingestion (MVP). No Celery/Redis.
+- **Background work:** FastAPI handles request/response orchestration; ingestion jobs are enqueued to ARQ and processed by dedicated workers through Redis. Do not use FastAPI `BackgroundTasks` for ingestion.
 
 ## Modularity Rules
 

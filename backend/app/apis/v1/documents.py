@@ -1,56 +1,75 @@
-import logging
+from __future__ import annotations
+
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter
 
-from ...core import get_settings
+from ...core import DocumentStatus
+from ...core.exceptions import InvalidDocumentStateError, NotFoundError
 from ...dependencies import (
+    ArqPoolDep,
+    DocumentServiceDep,
     SessionDep,
-    SettingsDep,
-    StorageDep,
-    VectorStoreDep,
-    get_storage,
-    get_vector_store,
 )
-from ...infrastructure.db import get_session_maker
-from ...services import DocumentService, IngestionService
+from ...models import Document
+from ...schemas import DocumentResponse
 
-logger = logging.getLogger(__name__)
-
-
-async def run_ingestion_background(document_id: UUID) -> None:
-    """Background task: ingest a document after upload response has been sent.
-
-    Creates its own DB session and adapters because the request-scoped session
-    is closed by the time this runs.
-    """
-    settings = get_settings()
-    storage = get_storage()
-    vector_store = get_vector_store(settings)
-    maker = get_session_maker()
-    async with maker() as db:
-        service = IngestionService(db, storage, vector_store, settings)
-        try:
-            await service.ingest(document_id)
-        except Exception:
-            logger.exception("Background ingestion failed for document %s", document_id)
-
-
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(
+    prefix="/documents",
+    tags=["documents"],
+)
 
 
 @router.delete(
     "/{document_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=204,
     summary="Delete a document",
 )
 async def delete_document(
     document_id: UUID,
-    db: SessionDep,
-    storage: StorageDep,
-    vector_store: VectorStoreDep,
-    settings: SettingsDep,
+    doc_service: DocumentServiceDep,
 ) -> None:
-    """Delete a document entirely (vectors, file, and DB record)."""
-    service = DocumentService(db, storage, settings, vector_store)
-    await service.delete_document(document_id)
+    """Delete a document and all associated data."""
+    await doc_service.delete_document(document_id)
+
+
+@router.post(
+    "/{document_id}/retry",
+    response_model=DocumentResponse,
+    summary="Retry ingestion of a failed document",
+)
+async def retry_document(
+    document_id: UUID,
+    db: SessionDep,
+    arq_pool: ArqPoolDep,
+) -> DocumentResponse:
+    """Reset a failed document and enqueue it for ingestion."""
+    document = await db.get(
+        Document,
+        document_id,
+    )
+
+    if document is None:
+        raise NotFoundError(
+            message=f"Document {document_id} not found",
+        )
+
+    if document.status != DocumentStatus.FAILED:
+        raise InvalidDocumentStateError(
+            message=(
+                "Document must be in 'failed' state to retry. "
+                f"Current state: '{document.status.value}'."
+            ),
+        )
+
+    document.status = DocumentStatus.UPLOADED
+
+    await db.commit()
+    await db.refresh(document)
+
+    await arq_pool.enqueue_job(
+        "ingest_document",
+        str(document.id),
+    )
+
+    return DocumentResponse.model_validate(document)

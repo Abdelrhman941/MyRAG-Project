@@ -14,7 +14,8 @@ sequenceDiagram
     participant SVC as DocumentService
     participant DB as SQLite
     participant FS as FileStoragePort
-    participant BG as BackgroundTasks → IngestionService
+    participant Q as ARQ Queue (Redis)
+    participant W as ARQ Worker → IngestionService
     participant QD as VectorStorePort (Qdrant)
 
     C->>API: POST /api/v1/chat/sessions/{session_id}/documents/batch (≤10 files)
@@ -29,12 +30,12 @@ sequenceDiagram
         SVC-->>API: Document
     end
     API-->>C: 201 per-file results
-    API->>BG: schedule ingestion (async semaphore)
-    loop each uploaded document
-        BG->>DB: status → processing
-        BG->>BG: parse → chunk → embed (BGE-M3)
-        BG->>QD: upsert chunks
-        BG->>DB: status → ready | failed
+    API->>Q: enqueue ARQ job per uploaded document
+    loop each job (ARQ Worker)
+        W->>DB: status → processing
+        W->>W: parse → chunk → embed (BGE-M3)
+        W->>QD: upsert chunks
+        W->>DB: status → ready | failed
     end
 ```
 
@@ -51,7 +52,7 @@ sequenceDiagram
     participant GEN as generation (prompt)
     participant LLM as LLMProviderPort (external API)
 
-    C->>API: POST /sessions/{id}/messages { question }
+    C->>API: POST /api/v1/chat/sessions/{id}/messages/stream { question }
     API->>CS: answer(session_id, question)
     CS->>SR: load session (last N msgs + summary)
     CS->>EMB: embed(question)
@@ -59,33 +60,41 @@ sequenceDiagram
     CS->>GEN: assemble prompt (budgeted)
     CS->>LLM: /chat/completions
     LLM--xCS: timeout/5xx → 502 llm_provider_error
-    LLM-->>CS: answer text
+    LLM-->>CS: answer text (streaming)
     CS->>SR: persist user + assistant messages
-    opt every K turns
-        CS->>LLM: summarize transcript (background)
+    opt every K turns (FastAPI BackgroundTask, post-response)
+        CS->>LLM: summarize transcript
         CS->>SR: update session summary
     end
+    opt first assistant message, no title yet (FastAPI BackgroundTask, post-response)
+        CS->>SR: generate + persist session title
+    end
     CS-->>API: { answer, sources }
-    API-->>C: 200
+    API-->>C: 200 (streaming SSE)
 ```
 
 ## Endpoint ↔ DB/Store matrix
 
 | Endpoint | SQLite | Filesystem | Qdrant | LLM API |
 |---|---|---|---|---|
-| `POST /chat/sessions/{session_id}/documents` ✅ | insert document | write file | — | — |
-| `POST /chat/sessions/{session_id}/documents/batch` ✅ | insert ≤10 docs | write ≤10 files | (async) upsert | — |
-| `GET /chat/sessions/{session_id}/documents` ✅ | select | — | — | — |
-| `DELETE /chat/sessions/{session_id}` ✅ | delete row | delete file | delete by document_id | — |
-| `POST /chat/sessions` ✅ | insert session | — | — | — |
-| `GET /chat/sessions` ✅ | select | — | — | — |
-| `DELETE /chat/sessions/{id}` ✅ | delete session + docs | delete docs files | delete by document_id | — |
-| `GET /sessions/{id}/messages` ✅ | select | — | — | — |
-| `POST /sessions/{id}/messages` ✅ | read + insert | — | hybrid query | 1 call (+1 background summary) |
+| `GET /` ✅ | — | — | — | — |
+| `GET /healthz` ✅ | — | — | — | — |
+| `GET /readyz` ✅ | — | — | Qdrant ping | — |
+| `GET /api/v1/system/config` ✅ | — | — | — | — |
+| `POST /api/v1/chat/sessions` ✅ | insert session | — | — | — |
+| `GET /api/v1/chat/sessions` ✅ | select | — | — | — |
+| `GET /api/v1/chat/sessions/{id}` ✅ | select | — | — | — |
+| `DELETE /api/v1/chat/sessions/{id}` ✅ | delete session + docs | delete doc files | delete by document_id | — |
+| `GET /api/v1/chat/sessions/{id}/messages` ✅ | select | — | — | — |
+| `POST /api/v1/chat/sessions/{id}/messages/stream` ✅ | read + insert | — | hybrid query | 1 call (+1 background summary) |
+| `POST /api/v1/chat/sessions/{id}/documents/batch` ✅ | insert ≤10 docs | write ≤10 files | (ARQ async) upsert | — |
+| `GET /api/v1/chat/sessions/{id}/documents` ✅ | select | — | — | — |
+| `DELETE /api/v1/documents/{id}` ✅ | delete row | delete file | delete by document_id | — |
+| `POST /api/v1/documents/{id}/retry` ✅ | update status | — | (ARQ async) upsert | — |
 
 ## Performance notes
 
-- Upload response time is independent of ingestion cost — ingestion is backgrounded.
+- Upload response time is independent of ingestion cost — ingestion is ARQ-enqueued.
 - Multi-file upload: per-file streaming + async semaphore; throughput bounded by disk
   and the embedding batch, not by file count linearly.
 - Chat latency = 1 local embedding (~100–300 ms CPU) + 1 Qdrant query (~ms) +

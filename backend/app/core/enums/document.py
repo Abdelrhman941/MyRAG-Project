@@ -22,3 +22,4 @@ class DocumentStatus(StrEnum):
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
+    DELETING = "deleting"

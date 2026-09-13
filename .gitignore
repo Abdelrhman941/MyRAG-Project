@@ -1,0 +1,78 @@
+# Project & System
+.DS_Store
+/NOVA/
+/data/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# ------------------------------------------------------------------------------
+# Backend (Python / FastAPI)
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[codz]
+*.so
+
+# Environments
+.venv/
+venv/
+env/
+
+# Tool Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local Databases & Runtime
+*.sqlite3
+*.sqlite3-journal
+celerybeat.pid
+*.rdb
+*.aof
+backend/data
+.run
+
+# ------------------------------------------------------------------------------
+# Frontend (Node / Next.js)
+# ------------------------------------------------------------------------------
+node_modules/
+
+# Next.js Build Output
+.next/
+out/
+build/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Debug Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Yarn PnP
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Vercel
+.vercel/
+
+# Impeccable (Live editing caches)
+.impeccable/
+.impeccable-live.json
+.impeccable-live/
+src/lib/impeccable/
+plugins/impeccable-live.client.ts
+app/plugins/impeccable-live.client.ts
+src/plugins/impeccable-live.client.ts

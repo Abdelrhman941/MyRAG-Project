@@ -39,7 +39,7 @@ flowchart TB
     DEDUP -->|no| REC --> MOV --> RESP
     REC -.-> DB
     MOV -.-> FS
-    MOV ==>|BackgroundTasks| P1 --> PARSE --> CHUNK --> EMBED --> UPSERT --> P2
+    MOV ==>|enqueue ARQ job| P1 --> PARSE --> CHUNK --> EMBED --> UPSERT --> P2
     UPSERT -.-> QD
     P2 -->|yes| OK -.-> DB
     P2 -->|no| FAIL -.-> DB

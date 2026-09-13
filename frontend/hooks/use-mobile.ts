@@ -2,20 +2,40 @@ import * as React from 'react';
 
 const MOBILE_BREAKPOINT = 768;
 
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(() =>
-    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : undefined
-  );
+function getMediaQuery() {
+  return `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
+}
 
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    };
-    mql.addEventListener('change', onChange);
-    return () => mql.removeEventListener('change', onChange);
-  }, []);
+function subscribeToMediaQuery(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => {};
+  }
 
-  return !!isMobile;
+  const mediaQuery = window.matchMedia(getMediaQuery());
+
+  const handleChange = () => {
+    onStoreChange();
+  };
+
+  mediaQuery.addEventListener('change', handleChange);
+
+  return () => {
+    mediaQuery.removeEventListener('change', handleChange);
+  };
+}
+
+function getSnapshot(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.matchMedia(getMediaQuery()).matches;
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+export function useIsMobile(): boolean {
+  return React.useSyncExternalStore(subscribeToMediaQuery, getSnapshot, getServerSnapshot);
 }

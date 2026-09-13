@@ -2,9 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { getBackendUrl } from './backend-url';
 import { Document, Message, Session } from './types';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const BACKEND_URL = getBackendUrl();
 
 interface ApiError {
   error: {
@@ -12,6 +13,31 @@ interface ApiError {
     message: string;
     details?: string;
   };
+}
+
+function normalizeApiError(value: unknown): ApiError {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'error' in value &&
+    value.error &&
+    typeof value.error === 'object'
+  ) {
+    const error = value.error as Record<string, unknown>;
+    if (typeof error.code !== 'string' || typeof error.message !== 'string') {
+      return { error: { code: 'unknown', message: 'An unknown error occurred' } };
+    }
+
+    return {
+      error: {
+        code: error.code,
+        message: error.message,
+        ...(typeof error.details === 'string' ? { details: error.details } : {}),
+      },
+    };
+  }
+
+  return { error: { code: 'unknown', message: 'An unknown error occurred' } };
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -24,20 +50,20 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    let errorData;
+    let errorData: unknown;
     try {
       errorData = await response.json();
     } catch {
-      errorData = { error: { code: 'unknown', message: 'An unknown error occurred' } };
+      errorData = null;
     }
-    // We cannot throw instances of custom Error subclasses across the RSC boundary natively
-    // in Next.js Server Actions sometimes, but throwing a normal Error with added props works
-    const e = new Error(errorData.error?.message || 'Unknown error') as Error & {
+    const apiError = normalizeApiError(errorData);
+    // Server Actions can serialize normal Errors but not custom subclasses.
+    const e = new Error(apiError.error.message) as Error & {
       status: number;
       data: ApiError;
     };
     e.status = response.status;
-    e.data = errorData;
+    e.data = apiError;
     throw e;
   }
 
@@ -47,15 +73,22 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export async function getSessions(): Promise<Session[]> {
+  // Backend failures must reach the route error boundary instead of rendering an empty sidebar.
+  const data = await apiFetch<{ sessions: Session[] }>('/api/v1/chat/sessions', {
+    next: { tags: ['sessions'], revalidate: 0 },
+  });
+  return data.sessions;
+}
+
+export async function getSession(sessionId: string): Promise<Session | null> {
   try {
-    // Backend returns { sessions: [...] } — unwrap the envelope
-    const data = await apiFetch<{ sessions: Session[] }>('/api/v1/chat/sessions', {
-      next: { tags: ['sessions'], revalidate: 0 },
-    });
-    return data.sessions;
-  } catch (e) {
-    console.error('Failed to fetch sessions', e);
-    return [];
+    return await apiFetch<Session>(
+      `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}`,
+      { next: { tags: [`session-${sessionId}`], revalidate: 0 } }
+    );
+  } catch (e: unknown) {
+    if ((e as { status?: number })?.status === 404) return null;
+    throw e;
   }
 }
 
@@ -63,7 +96,7 @@ export async function getMessages(sessionId: string): Promise<Message[] | null> 
   try {
     // Backend returns { messages: [...] } — unwrap the envelope
     const data = await apiFetch<{ messages: Message[] }>(
-      `/api/v1/chat/sessions/${sessionId}/messages`,
+      `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
       { next: { tags: [`messages-${sessionId}`], revalidate: 0 } }
     );
     return data.messages;
@@ -75,21 +108,28 @@ export async function getMessages(sessionId: string): Promise<Message[] | null> 
 
 export async function getDocuments(sessionId: string): Promise<Document[] | null> {
   try {
-    return await apiFetch<Document[]>(`/api/v1/chat/sessions/${sessionId}/documents`, {
-      next: { tags: [`documents-${sessionId}`], revalidate: 0 },
-    });
+    return await apiFetch<Document[]>(
+      `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/documents`,
+      {
+        next: { tags: [`documents-${sessionId}`], revalidate: 0 },
+      }
+    );
   } catch (e: unknown) {
     if ((e as { status?: number })?.status === 404) return null;
     throw e;
   }
 }
 
+export async function createSession(): Promise<Session> {
+  return apiFetch<Session>('/api/v1/chat/sessions', {
+    method: 'POST',
+  });
+}
+
 export async function createSessionAction() {
   let session;
   try {
-    session = await apiFetch<Session>('/api/v1/chat/sessions', {
-      method: 'POST',
-    });
+    session = await createSession();
   } catch (e) {
     console.error(e);
     return;
@@ -98,22 +138,17 @@ export async function createSessionAction() {
   redirect(`/chat/${session.id}`);
 }
 
-export async function bootstrapSessionAction() {
-  const sessions = await getSessions();
-  if (sessions && sessions.length > 0) {
-    redirect(`/chat/${sessions[0].id}`);
-  } else {
-    await createSessionAction();
-  }
-}
-
 export async function deleteSessionAction(
   sessionId: string,
   currentSessionId: string | undefined,
-  otherSessions: Session[]
+  otherSessions: Session[],
+  force: boolean = false
 ) {
   try {
-    await apiFetch(`/api/v1/chat/sessions/${sessionId}`, { method: 'DELETE' });
+    await apiFetch(
+      `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}${force ? '?force=true' : ''}`,
+      { method: 'DELETE' }
+    );
   } catch (e: unknown) {
     return {
       success: false,
@@ -134,10 +169,10 @@ export async function deleteSessionAction(
       let newSession;
       try {
         newSession = await apiFetch<Session>('/api/v1/chat/sessions', { method: 'POST' });
-        redirect(`/chat/${newSession.id}`);
       } catch {
         redirect('/');
       }
+      redirect(`/chat/${newSession.id}`);
     }
   }
   return { success: true };
@@ -145,7 +180,7 @@ export async function deleteSessionAction(
 
 export async function deleteDocumentAction(documentId: string, sessionId: string) {
   try {
-    await apiFetch(`/api/v1/documents/${documentId}`, { method: 'DELETE' });
+    await apiFetch(`/api/v1/documents/${encodeURIComponent(documentId)}`, { method: 'DELETE' });
     revalidatePath(`/chat/${sessionId}/documents`);
     return { success: true };
   } catch (e: unknown) {
@@ -159,55 +194,38 @@ export async function deleteDocumentAction(documentId: string, sessionId: string
   }
 }
 
-export async function uploadBatchAction(sessionId: string, formData: FormData) {
+export async function retryDocumentAction(documentId: string, sessionId: string) {
   try {
-    const data = await apiFetch<{ results: { ok: boolean; document?: Document }[] }>(
-      `/api/v1/chat/sessions/${sessionId}/documents/batch`,
-      {
-        method: 'POST',
-        body: formData,
-      }
-    );
-    const results = data.results?.filter((r) => r.ok && r.document).map((r) => r.document) || [];
+    await apiFetch(`/api/v1/documents/${encodeURIComponent(documentId)}/retry`, { method: 'POST' });
     revalidatePath(`/chat/${sessionId}/documents`);
-    return { success: true, results };
+    return { success: true };
   } catch (e: unknown) {
     return {
       success: false,
       error: (e as { data?: ApiError })?.data?.error || {
         code: 'unknown',
-        message: 'Upload failed',
+        message: 'Failed to retry document',
       },
     };
   }
 }
 
-export async function sendMessageAction(sessionId: string, question: string) {
+export async function getReadyStatusAction(): Promise<{ status: string; detail?: string }> {
+  const url = `${BACKEND_URL}/readyz`;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = await apiFetch<any>(`/api/v1/chat/sessions/${sessionId}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
-    });
-
-    const message: Message = {
-      id: `assistant-${Date.now()}`,
-      role: 'assistant',
-      content: data.answer,
-      sources: data.sources,
-      created_at: new Date().toISOString(),
-    };
-
-    revalidatePath('/chat', 'layout');
-    return { success: true, response: message };
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) {
+      if (response.status === 503) {
+        return await response.json();
+      }
+      return { status: 'error', detail: `HTTP error ${response.status}` };
+    }
+    return await response.json();
   } catch (e: unknown) {
-    return {
-      success: false,
-      error: (e as { data?: ApiError })?.data?.error || {
-        code: 'unknown',
-        message: 'Failed to send message',
-      },
-    };
+    return { status: 'error', detail: (e as Error).message || 'Connection failed' };
   }
+}
+
+export async function revalidateSessionsAction() {
+  revalidatePath('/chat');
 }

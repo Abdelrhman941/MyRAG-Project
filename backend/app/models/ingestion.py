@@ -8,6 +8,7 @@ class ParsedSegment:
 
     text: str
     page_number: int | None = None
+    section: str | None = None
 
 
 @dataclass(slots=True)
@@ -17,3 +18,5 @@ class Chunk:
     text: str
     document_id: UUID
     chunk_index: int
+    page_number: int | None = None
+    section: str | None = None

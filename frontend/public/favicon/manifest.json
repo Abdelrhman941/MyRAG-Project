@@ -1,0 +1,14 @@
+{
+  "name": "RAG Assistant",
+  "short_name": "RAG Assistant",
+  "icons": [
+    {
+      "src": "/favicon/icon1.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#171717",
+  "background_color": "#171717",
+  "display": "standalone"
+}

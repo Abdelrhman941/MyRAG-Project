@@ -1,4 +1,5 @@
-import logging
+from __future__ import annotations
+
 from uuid import UUID
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -6,39 +7,46 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from ..core import get_settings
 from ..models import Chunk, ParsedSegment
 
-logger = logging.getLogger(__name__)
+_splitter: RecursiveCharacterTextSplitter | None = None
 
 
-def chunk(segments: list[ParsedSegment], document_id: UUID) -> list[Chunk]:
+def _get_splitter() -> RecursiveCharacterTextSplitter:
+    global _splitter
+
+    if _splitter is None:
+        settings = get_settings()
+
+        _splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=settings.CHUNK_SIZE_TOKENS,
+            chunk_overlap=settings.CHUNK_OVERLAP_TOKENS,
+        )
+
+    return _splitter
+
+
+def chunk(
+    segments: list[ParsedSegment],
+    document_id: UUID,
+) -> list[Chunk]:
     """Convert parsed segments into embedding-ready chunks."""
     if not segments:
         return []
 
-    # Combine segments into a single document string, keeping track of order.
-    # RecursiveCharacterTextSplitter operates on a single text string.
-    # For now, we will join the segments with a space or double newline.
-    # Since whitespace collapse already happened, joining with a newline is good.
-    full_text = "\n\n".join(seg.text for seg in segments)
-
-    # Initialize the token-aware text splitter
-    settings = get_settings()
-    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=settings.CHUNK_SIZE_TOKENS,
-        chunk_overlap=settings.CHUNK_OVERLAP_TOKENS,
-    )
-
-    # Perform the split
-    raw_chunks = splitter.split_text(full_text)
-
-    # Convert to Chunk objects
+    splitter = _get_splitter()
     chunks: list[Chunk] = []
-    for i, text in enumerate(raw_chunks):
-        chunks.append(
-            Chunk(
-                text=text,
-                document_id=document_id,
-                chunk_index=i,
+
+    for segment in segments:
+        raw_chunks = splitter.split_text(segment.text)
+
+        for text in raw_chunks:
+            chunks.append(
+                Chunk(
+                    text=text,
+                    document_id=document_id,
+                    chunk_index=len(chunks),
+                    page_number=segment.page_number,
+                    section=segment.section,
+                )
             )
-        )
 
     return chunks

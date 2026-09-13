@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from typing import Any
 
@@ -7,17 +9,33 @@ from ..core.config import Settings
 from ..memory.manager import MemoryManager
 from ..models import RetrievalResult
 from ..models.chat import ChatMessage
+from .language import PromptLanguage, detect_language
+from .prompts import PromptTemplates
+from .prompts.ar import ARABIC_PROMPTS
+from .prompts.en import ENGLISH_PROMPTS
 
 logger = logging.getLogger(__name__)
 
+_PROMPTS: dict[PromptLanguage, PromptTemplates] = {
+    PromptLanguage.AR: ARABIC_PROMPTS,
+    PromptLanguage.EN: ENGLISH_PROMPTS,
+}
+
 
 class PromptBuilder:
+    """Build localized, token-budgeted prompts for LLM generation."""
+
     def __init__(self, settings: Settings):
         self.settings = settings
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def _count_tokens(self, text: str) -> int:
         return len(self.tokenizer.encode(text))
+
+    def _get_prompts(self, text: str) -> PromptTemplates:
+        """Select prompt templates based on the dominant language of text."""
+        language = detect_language(text)
+        return _PROMPTS[language]
 
     def build_chat_prompt(
         self,
@@ -27,116 +45,170 @@ class PromptBuilder:
         question: str,
         memory_manager: MemoryManager,
     ) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
-        """
-        Builds the messages payload and returns the used sources.
-        Enforces the shared LLM_CONTEXT_TOKEN_BUDGET allocation.
-        """
+        """Build a localized chat prompt within the configured token budget."""
+        prompts = self._get_prompts(question)
         budget = self.settings.LLM_CONTEXT_TOKEN_BUDGET
 
-        # 1. System Prompt Base
-        system_base = (
-            "You are a helpful AI assistant answering questions "
-            "based on the provided documents. "
-            "Always cite your sources using the chunk numbers "
-            "provided (e.g. [1], [2]). "
-            "If the provided documents do not contain the answer, "
-            "you must state that you do not "
-            "know based on the context, or answer based on "
-            "general knowledge if appropriate, "
-            "but clearly distinguish between document facts "
-            "and general knowledge."
-        )
+        system_base = prompts.chat_system
+
         if summary:
             system_base += f"\n\nPrevious Conversation Summary:\n{summary}"
 
-        if not chunks:
-            system_base += (
-                "\n\n[SYSTEM]: No relevant context was found in the documents. "
-                "Answer based only "
-                "on prior chat context or explicitly state you do "
-                "not have the information."
-            )
-
         budget -= self._count_tokens(system_base)
 
-        # 2. Reserve budget for the user's question first
-        # ~4 tokens overhead for role mapping
         question_cost = self._count_tokens(question) + 4
+
         if budget < question_cost:
-            logger.warning("Token budget too small for the user question alone!")
-            # Still append it, but we have 0 budget for anything else
+            logger.warning(
+                "LLM context budget is too small for the user question",
+            )
             budget = 0
         else:
             budget -= question_cost
 
-        # 3. Trim Chunks
-        formatted_chunks = []
-        used_sources = []
-        for i, res in enumerate(chunks, 1):
-            doc_id = str(res.chunk.document_id)
-            file_name = res.original_file_name
-            chunk_idx = res.chunk.chunk_index
-            text = res.chunk.text
+        formatted_chunks: list[str] = []
+        used_sources: list[dict[str, Any]] = []
 
-            chunk_str = f"--- Source [{i}] ---\nFile: {file_name}\nContext: {text}\n"
-            tokens = self._count_tokens(chunk_str)
+        for index, result in enumerate(chunks, start=1):
+            document_id = str(result.chunk.document_id)
+            file_name = result.original_file_name
+            chunk_index = result.chunk.chunk_index
+            text = result.chunk.text
 
-            if budget - tokens > 0:
-                budget -= tokens
-                formatted_chunks.append(chunk_str)
-                used_sources.append(
-                    {
-                        "document_id": doc_id,
-                        "original_file_name": file_name,
-                        "chunk_index": chunk_idx,
-                    }
-                )
-            else:
+            chunk_str = (
+                f"--- Source [{index}] ---\n"
+                f"{prompts.source_file_label}: {file_name}\n"
+                f"{prompts.source_context_label}: {text}\n"
+            )
+
+            chunk_tokens = self._count_tokens(chunk_str)
+
+            if chunk_tokens > budget:
                 break
 
+            budget -= chunk_tokens
+            formatted_chunks.append(chunk_str)
+
+            used_sources.append(
+                {
+                    "document_id": document_id,
+                    "original_file_name": file_name,
+                    "chunk_index": chunk_index,
+                    "page_number": result.chunk.page_number,
+                    "section": result.chunk.section,
+                }
+            )
+
         if formatted_chunks:
-            system_context = "\n\nRetrieved Documents:\n" + "\n".join(formatted_chunks)
-            system_msg = system_base + system_context
+            system_msg = (
+                f"{system_base}\n\n"
+                f"{prompts.source_header}\n"
+                f"{'\n'.join(formatted_chunks)}"
+            )
         else:
-            system_msg = system_base
+            system_msg = f"{system_base}\n\n{prompts.no_context}"
+
             used_sources = []
 
-        # 4. Trim History with the REST of the budget
-        trimmed_history = memory_manager.trim_to_budget(history, budget)
+        trimmed_history = memory_manager.trim_to_budget(
+            history,
+            budget,
+        )
 
-        messages = [{"role": "system", "content": system_msg}]
-        for msg in trimmed_history:
-            messages.append({"role": msg.role, "content": msg.content})
+        messages = [
+            {
+                "role": "system",
+                "content": system_msg,
+            }
+        ]
 
-        # Unconditionally append the user's question
-        messages.append({"role": "user", "content": question})
+        messages.extend(
+            {
+                "role": message.role,
+                "content": message.content,
+            }
+            for message in trimmed_history
+        )
+
+        messages.append(
+            {
+                "role": "user",
+                "content": question,
+            }
+        )
 
         return messages, used_sources
 
     def build_summary_prompt(
-        self, previous_summary: str | None, new_messages: list[ChatMessage]
+        self,
+        previous_summary: str | None,
+        new_messages: list[ChatMessage],
     ) -> list[dict[str, str]]:
-        """Prompt to incrementally condense the conversation."""
-        system_msg = (
-            "You are an AI assistant tasked with condensing a "
-            "conversation history into a running summary. "
-            "Combine the previous summary (if any) with the new "
-            "messages to create a new, concise summary "
-            "that retains the key facts, user preferences, and "
-            "main topics discussed."
+        """Build a localized summary prompt from new conversation messages."""
+        language_source = "\n".join(
+            message.content for message in new_messages if message.content
+        )
+
+        prompts = self._get_prompts(
+            language_source,
         )
 
         prompt = ""
+
         if previous_summary:
             prompt += f"Previous Summary:\n{previous_summary}\n\n"
 
         prompt += "New Messages:\n"
-        for msg in new_messages:
-            prompt += f"{msg.role.capitalize()}: {msg.content}\n"
+
+        for message in new_messages:
+            prompt += f"{message.role.capitalize()}: {message.content}\n"
 
         prompt += "\nWrite the updated summary now."
 
         return [
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": prompt},
+            {
+                "role": "system",
+                "content": prompts.summary_system,
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ]
+
+    def build_query_rewrite_prompt(
+        self,
+        summary: str | None,
+        recent_history: list[ChatMessage],
+        current_question: str,
+    ) -> list[dict[str, str]]:
+        """Build a localized query-rewrite prompt."""
+        prompts = self._get_prompts(current_question)
+
+        prompt = ""
+
+        if summary:
+            prompt += f"Conversation Summary:\n{summary}\n\n"
+
+        if recent_history:
+            prompt += "Recent Messages:\n"
+
+            for message in recent_history:
+                prompt += f"{message.role.capitalize()}: {message.content}\n"
+
+        prompt += (
+            f"\n{prompts.query_rewrite_input_label}: "
+            f"{current_question}\n\n"
+            f"{prompts.query_rewrite_output_label}:"
+        )
+
+        return [
+            {
+                "role": "system",
+                "content": prompts.query_rewrite_system,
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
         ]

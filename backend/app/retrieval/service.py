@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from uuid import UUID
 
@@ -25,12 +26,13 @@ class RetrievalService:
 
         # Embed query
         model = get_embedding_model(self.settings.EMBEDDING_MODEL)
-        import asyncio
 
-        dense, sparse = await asyncio.to_thread(model.encode_batch, [query], 1)
+        dense, sparse = await asyncio.to_thread(
+            model.encode_batch, [query], 1, self.settings.RETRIEVAL_HYBRID
+        )
 
         query_dense = dense[0]
-        query_sparse = sparse[0] if self.settings.RETRIEVAL_HYBRID else None
+        query_sparse = sparse[0] if self.settings.RETRIEVAL_HYBRID and sparse else None
 
         # Query vector store
         try:
@@ -46,17 +48,25 @@ class RetrievalService:
 
         # Map to domain objects
         results = []
+        min_score = self.settings.RETRIEVAL_MIN_SCORE
+
         for raw in raw_results:
+            if raw["score"] < min_score:
+                continue
+
+            payload = raw["payload"]
             chunk = Chunk(
-                document_id=UUID(raw["document_id"]),
-                chunk_index=raw["chunk_index"],
-                text=raw["text"],
+                document_id=UUID(payload["document_id"]),
+                chunk_index=payload["chunk_index"],
+                text=payload["text"],
+                page_number=payload.get("page_number"),
+                section=payload.get("section"),
             )
             results.append(
                 RetrievalResult(
                     chunk=chunk,
-                    score=raw["_score"],
-                    original_file_name=raw.get("original_file_name", ""),
+                    score=raw["score"],
+                    original_file_name=payload.get("original_file_name", ""),
                 )
             )
 

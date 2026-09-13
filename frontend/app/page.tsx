@@ -1,28 +1,20 @@
-'use client';
+import { getSessions, createSession } from '@/lib/api';
+import { redirect } from 'next/navigation';
 
-import { bootstrapSessionAction } from '@/lib/api';
-import { useEffect, useRef } from 'react';
+export const dynamic = 'force-dynamic';
 
-export default function SplashPage() {
-  const called = useRef(false);
-
-  useEffect(() => {
-    if (!called.current) {
-      called.current = true;
-      bootstrapSessionAction();
+export default async function IndexPage() {
+  const sessions = await getSessions();
+  if (sessions && sessions.length > 0) {
+    redirect(`/chat/${sessions[0].id}`);
+  } else {
+    let session;
+    try {
+      session = await createSession();
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to initialize session');
     }
-  }, []);
-
-  return (
-    <div className="flex h-screen w-screen items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-4 animate-in fade-in duration-700">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-2xl">
-          R
-        </div>
-        <div className="text-muted-foreground text-sm font-medium tracking-widest uppercase">
-          Initializing
-        </div>
-      </div>
-    </div>
-  );
+    redirect(`/chat/${session.id}`);
+  }
 }

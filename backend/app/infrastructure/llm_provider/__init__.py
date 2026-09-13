@@ -1,3 +1,3 @@
-from .openai_compatible import LLMProviderError, OpenAICompatibleLLM
+from .openai_compatible import OpenAICompatibleLLM
 
-__all__ = ["LLMProviderError", "OpenAICompatibleLLM"]
+__all__ = ["OpenAICompatibleLLM"]
