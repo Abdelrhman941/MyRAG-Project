@@ -1,25 +1,45 @@
+# ------------------------------------------------------------------------------
+# Shell configuration
+# ------------------------------------------------------------------------------
 SHELL := /bin/bash
 
+# Run each target as a single script instead of separate commands
 .ONESHELL:
+
+# Strict options: -e (exit on any error), -u (exit on undefined variable),
+# -o pipefail (exit if any pipe command fails)
 .SHELLFLAGS := -eu -o pipefail -c
+
+# Suppress printing of commands themselves, only messages
 .SILENT:
 
+# Default target when user runs make alone
 .DEFAULT_GOAL := help
 
 
+# ==============================================================================
+# Project directories and variables
+# ==============================================================================
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
+CACHE_DIRS := .ruff_cache .mypy_cache .pytest_cache
 
+# Ports
 BACKEND_PORT := 8000
 FRONTEND_PORT := 3000
 
+# Runtime directory for PID files
 RUN_DIR := .run
 BACKEND_PID_FILE := $(RUN_DIR)/backend.pid
 WORKER_PID_FILE := $(RUN_DIR)/worker.pid
 
+# Docker command
 DOCKER := docker
 
 
+# ==============================================================================
+# Phony targets (not files)
+# ==============================================================================
 .PHONY: \
 	help \
 	check-docker \
@@ -50,6 +70,9 @@ DOCKER := docker
 	clean
 
 
+# ==============================================================================
+# Help target - displays available commands
+# ==============================================================================
 help:
 	echo "Available commands:"
 	echo
@@ -101,6 +124,9 @@ help:
 	echo "Tests are intentionally excluded for now."
 
 
+# ==============================================================================
+# Docker check - ensures Docker is installed and running
+# ==============================================================================
 check-docker:
 	command -v $(DOCKER) >/dev/null 2>&1 || {
 		echo "Error: Docker is not installed or not available in PATH."
@@ -113,6 +139,9 @@ check-docker:
 	}
 
 
+# ==============================================================================
+# Infrastructure (Qdrant + Redis)
+# ==============================================================================
 infra-up: check-docker
 	echo "==> Starting Qdrant and Redis..."
 	$(DOCKER) compose up -d qdrant redis
@@ -125,6 +154,9 @@ infra-down: check-docker
 	echo "==> Infrastructure stopped."
 
 
+# ==============================================================================
+# Database migrations
+# ==============================================================================
 db-migrate:
 	echo "==> Applying database migrations..."
 	cd "$(BACKEND_DIR)"
@@ -132,6 +164,11 @@ db-migrate:
 	echo "==> Database is up to date."
 
 
+# ==============================================================================
+# Backend services (API + ARQ worker)
+# ==============================================================================
+
+# Stop API and worker using PID files + kill anything on the port
 back-down:
 	echo "==> Stopping backend API and ARQ worker..."
 
@@ -151,6 +188,7 @@ back-down:
 
 	rm -f "$(BACKEND_PID_FILE)" "$(WORKER_PID_FILE)"
 
+	# If fuser is available, kill any process on the backend port
 	if command -v fuser >/dev/null 2>&1; then
 		fuser -k $(BACKEND_PORT)/tcp >/dev/null 2>&1 || true
 	fi
@@ -158,12 +196,14 @@ back-down:
 	echo "==> Backend stopped."
 
 
+# Start infrastructure + migrations + API + worker
 back-up: back-down infra-up db-migrate
 	mkdir -p "$(RUN_DIR)"
 
 	echo "==> Starting backend API and ARQ worker..."
 	echo
 
+	# Cleanup function executed on Ctrl+C or process termination
 	cleanup() {
 		echo
 		echo "==> Stopping backend processes..."
@@ -184,6 +224,7 @@ back-up: back-down infra-up db-migrate
 		echo "==> Backend processes stopped."
 	}
 
+	# Bind cleanup to exit events
 	trap cleanup INT TERM EXIT
 
 	cd "$(BACKEND_DIR)"
@@ -211,9 +252,11 @@ back-up: back-down infra-up db-migrate
 	echo "==> Press Ctrl+C to stop API and worker."
 	echo
 
+	# Wait for the first process to finish
 	wait -n "$$BACKEND_PID" "$$WORKER_PID"
 
 
+# Start ARQ worker only
 worker-up: infra-up db-migrate
 	mkdir -p "$(RUN_DIR)"
 	echo "==> Starting ARQ ingestion worker..."
@@ -221,6 +264,7 @@ worker-up: infra-up db-migrate
 	uv run arq app.workers.ingestion.WorkerSettings
 
 
+# Stop ARQ worker
 worker-down:
 	echo "==> Stopping ARQ ingestion worker..."
 
@@ -237,6 +281,9 @@ worker-down:
 	echo "==> ARQ worker stopped."
 
 
+# ==============================================================================
+# Frontend services
+# ==============================================================================
 front-up:
 	echo "==> Starting frontend on port $(FRONTEND_PORT)..."
 	cd "$(FRONTEND_DIR)"
@@ -253,10 +300,16 @@ front-down:
 	echo "==> Frontend stopped."
 
 
+# ==============================================================================
+# Combined stop
+# ==============================================================================
 down: front-down back-down infra-down
 	echo "==> All local services stopped."
 
 
+# ==============================================================================
+# Dependency management
+# ==============================================================================
 sync: backend-sync frontend-sync
 
 
@@ -278,6 +331,9 @@ frontend-sync:
 	pnpm install --frozen-lockfile
 
 
+# ==============================================================================
+# Code quality
+# ==============================================================================
 backend-fix:
 	echo "==> Fixing backend lint and formatting..."
 	cd "$(BACKEND_DIR)"
@@ -308,19 +364,25 @@ frontend-typecheck:
 frontend-quality: frontend-lint frontend-typecheck
 
 
+quality: backend-quality frontend-quality
+
+
+# ==============================================================================
+# Build
+# ==============================================================================
 frontend-build:
 	echo "==> Building frontend..."
 	cd "$(FRONTEND_DIR)"
 	pnpm build
 
 
-quality: backend-quality frontend-quality
-
-
 build: frontend-build
 	echo "==> Production build completed."
 
 
+# ==============================================================================
+# Verification and CI
+# ==============================================================================
 verify: quality
 	echo "==> Verification checks completed."
 
@@ -329,8 +391,15 @@ ci: quality frontend-build
 	echo "==> CI-equivalent checks completed."
 
 
+# ==============================================================================
+# Cleanup
+# ==============================================================================
 clean:
 	echo "==> Cleaning generated local artifacts..."
 	rm -rf "$(RUN_DIR)"
 	rm -rf "$(FRONTEND_DIR)/.next"
+	# Remove caches from root, backend, and frontend
+	rm -rf $(CACHE_DIRS) \
+	       $(addprefix $(BACKEND_DIR)/,$(CACHE_DIRS)) \
+	       $(addprefix $(FRONTEND_DIR)/,$(CACHE_DIRS))
 	echo "==> Clean complete."
